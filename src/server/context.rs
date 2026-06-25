@@ -147,12 +147,6 @@ impl ServerCtx {
             };
         }
 
-        // Setup tasks for the server.
-        match self.clone().setup_tasks(ctx).await {
-            Ok(_) => (),
-            Err(e) => bail!("Failed to setup tasks for server: {}", e),
-        }
-
         Ok(())
     }
 

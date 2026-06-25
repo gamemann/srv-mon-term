@@ -9,7 +9,6 @@ use crate::server::ServerCtx;
 use crate::server::data::ServerStatus;
 use crate::server::types::latency::{ServerLatency, ServerLatencyType};
 use crate::server::types::query::ServerQueryType;
-use crate::time::get_now_ms;
 
 use crate::query::ext::QueryExt;
 
@@ -60,7 +59,10 @@ impl ServerCtx {
                     ServerLatencyType::A2sInfo => {
                         let mut server = self.server.write().await;
 
-                        match query.query_info(&mut server, query_timeout.clone()).await {
+                        match query
+                            .query_info(&mut server, query_timeout.clone(), false)
+                            .await
+                        {
                             Ok(v) => v,
                             Err(e) => bail!("Failed to query server info: {}", e),
                         }
@@ -68,7 +70,10 @@ impl ServerCtx {
                     ServerLatencyType::A2sPlayers => {
                         let mut server = self.server.write().await;
 
-                        match query.query_users(&mut server, query_timeout.clone()).await {
+                        match query
+                            .query_users(&mut server, query_timeout.clone(), false)
+                            .await
+                        {
                             Ok(v) => v,
                             Err(e) => bail!("Failed to query server users: {}", e),
                         }
@@ -76,7 +81,10 @@ impl ServerCtx {
                     ServerLatencyType::A2sRules => {
                         let mut server = self.server.write().await;
 
-                        match query.query_vars(&mut server, query_timeout.clone()).await {
+                        match query
+                            .query_vars(&mut server, query_timeout.clone(), false)
+                            .await
+                        {
                             Ok(v) => v,
                             Err(e) => bail!("Failed to query server vars: {}", e),
                         }
@@ -115,7 +123,7 @@ impl ServerCtx {
         latencies.push_back(ServerLatency {
             online: status == ServerStatus::Online,
             type_: latency_type,
-            ts: get_now_ms() as u64,
+            ts: chrono::Utc::now().timestamp_millis() as u64,
             val: latency,
         });
 

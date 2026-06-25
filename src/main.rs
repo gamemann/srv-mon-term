@@ -72,6 +72,7 @@ async fn main() {
 
     // less code \O/
     let logger = &ctx.logger;
+    let args = &ctx.args;
 
     log_debug!(logger.write().await, "Attempting to initialize store...");
 
@@ -89,7 +90,7 @@ async fn main() {
 
     log_info!(logger.write().await, "Attempting to initialize servers...");
 
-    // Setup servers.
+    // Setup servers as long as we're not in isolation mode.
     match servers_setup_all(ctx.clone()).await {
         Ok(_) => {
             log_info!(logger.write().await, "Set up servers...");
@@ -101,17 +102,17 @@ async fn main() {
         }
     }
 
-    // Check for CLI.
-    log_info!(logger.write().await, "Checking for CLI overrides...");
+    // Check for CLI server override.
+    log_info!(logger.write().await, "Checking for server CLI overrides...");
 
     match check_server_cli(ctx.clone()).await {
         Ok(_) => {
-            log_info!(logger.write().await, "Checked for CLI overrides...");
+            log_info!(logger.write().await, "Checked for server CLI overrides...");
         }
         Err(e) => {
             log_fatal!(
                 logger.write().await,
-                "Failed to check for CLI overrides: {}",
+                "Failed to check for server CLI overrides: {}",
                 e
             );
 
@@ -122,16 +123,18 @@ async fn main() {
     log_debug!(logger.write().await, "Attempting to set up scheduler...");
 
     // Start the scheduler.
-    let sch = ctx.sch.read().await;
+    {
+        let sch = ctx.sch.read().await;
 
-    match sch.start().await {
-        Ok(_) => {
-            log_info!(logger.write().await, "Set up scheduler...");
-        }
-        Err(e) => {
-            log_fatal!(logger.write().await, "Failed to set up scheduler: {}", e);
+        match sch.start().await {
+            Ok(_) => {
+                log_info!(logger.write().await, "Set up scheduler...");
+            }
+            Err(e) => {
+                log_fatal!(logger.write().await, "Failed to set up scheduler: {}", e);
 
-            process::exit(1);
+                process::exit(1);
+            }
         }
     }
 
@@ -140,7 +143,24 @@ async fn main() {
             _ = ctx.cancel_token.cancelled() => {
                 log_info!(logger.write().await, "Cancellation signal received, shutting down...");
 
+
                 break;
+            }
+        }
+    }
+
+    // Shut down scheduler.
+    {
+        let mut sch = ctx.sch.write().await;
+
+        match sch.shutdown().await {
+            Ok(_) => {
+                log_info!(logger.write().await, "Shut down scheduler...");
+            }
+            Err(e) => {
+                log_fatal!(logger.write().await, "Failed to shut down scheduler: {}", e);
+
+                process::exit(1);
             }
         }
     }

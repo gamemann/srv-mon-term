@@ -4,6 +4,8 @@ use anyhow::{Result, anyhow, bail};
 
 use crate::{
     context::Context,
+    log_info,
+    logger::level::LogLevel,
     server::{ServerCtx, types::query::ServerQueryType},
 };
 
@@ -29,47 +31,75 @@ pub async fn check_server_cli(ctx: Context) -> Result<()> {
         Err(_) => bail!("Invalid query type: {}", query_str),
     };
 
+    log_info!(
+        ctx.logger.write().await,
+        "Found server through CLI: {}:{}. Query type: {:?}. Attempting to find server context...",
+        ip,
+        port,
+        query_type
+    );
+
     let add = ctx.args.add;
     let delete = ctx.args.delete;
 
     // Attempt to find the server context for the provided IP and port.
     let srv_ctx = match ServerCtx::get_server_ctx_by_addr(ctx.clone(), &ip.to_string(), port).await
     {
-        Ok(sctx) => sctx.clone(),
-        Err(_) => {
-            // Error just indicates that the server context doesn't exist, so we'll want to add it if we're adding.
-            if add {
-                // If the server context doesn't exist and we're adding, create it.
-                let new_srv_ctx = ServerCtx::new(ip.to_string(), port, None);
-
-                if let Some(ref q) = query_type {
-                    new_srv_ctx.server.write().await.query_type = q.clone();
-                }
-
-                let new_srv_ctx = Arc::new(new_srv_ctx);
-
-                ctx.servers.write().await.push(new_srv_ctx.clone());
-
-                // We need to spawn the tasks and such.
-                {
-                    let new_srv_ctx = new_srv_ctx.clone();
-
-                    new_srv_ctx.add(ctx.clone()).await?;
-                }
-
-                new_srv_ctx
-            } else if delete {
-                bail!("Failed to find server with IP {} and port {}", ip, port)
-            } else {
-                return Ok(());
+        Ok(sctx) => {
+            // If we're in isolation mode, we need to setup the tasks.
+            if ctx.args.isolate {
+                sctx.clone().setup_tasks(ctx.clone()).await?;
             }
+
+            sctx.clone()
+        }
+        Err(_) => {
+            if delete {
+                bail!(
+                    "Failed to find server context for {}:{}. Cannot delete server that doesn't exist.",
+                    ip,
+                    port
+                );
+            }
+
+            // If the server context doesn't exist and we're adding, create it.
+            let new_srv_ctx = ServerCtx::new(ip.to_string(), port, None);
+
+            if let Some(ref q) = query_type {
+                new_srv_ctx.server.write().await.query_type = q.clone();
+            }
+
+            let new_srv_ctx = Arc::new(new_srv_ctx);
+            {
+                let mut servers = ctx.servers.write().await;
+
+                servers.push(new_srv_ctx.clone());
+            }
+
+            // Add the server to the store if the flag is set.
+            if add {
+                let new_srv_ctx = new_srv_ctx.clone();
+
+                new_srv_ctx.add(ctx.clone()).await?;
+            }
+
+            // Setup tasks.
+            new_srv_ctx.clone().setup_tasks(ctx.clone()).await?;
+
+            new_srv_ctx
         }
     };
 
-    if let Some(ref q) = query_type {
+    {
         let mut server = srv_ctx.server.write().await;
 
-        server.query_type = q.clone();
+        if let Some(ref q) = query_type {
+            server.query_type = q.clone();
+        }
+
+        if let Some(timeout) = ctx.args.timeout {
+            server.query_timeout = timeout;
+        }
     }
 
     Ok(())

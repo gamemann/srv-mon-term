@@ -4,6 +4,32 @@ use crate::logger::types::level::LogLevel;
 
 use std::str::FromStr;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryMonitor {
+    Info,
+    Users,
+    Vars,
+}
+
+impl QueryMonitor {
+    pub fn to_str(&self) -> &str {
+        match self {
+            QueryMonitor::Info => "info",
+            QueryMonitor::Users => "users",
+            QueryMonitor::Vars => "vars",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().trim() {
+            "info" => Some(QueryMonitor::Info),
+            "users" => Some(QueryMonitor::Users),
+            "vars" => Some(QueryMonitor::Vars),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Parser, Debug, Clone)]
 #[command(version, about = "A terminal-based server monitoring tool.")]
 pub struct Args {
@@ -36,6 +62,8 @@ pub struct Args {
         long = "log-path",
         help = "Path to a log file to write logs to (default: logs/%Y-%m-%d.log)."
     )]
+    pub log_path: Option<String>,
+
     #[arg(
         short = 'b',
         long = "basic",
@@ -58,6 +86,43 @@ pub struct Args {
     #[arg(short = 'q', long = "query", help = "The query type to use.")]
     pub query: Option<String>,
 
+    #[arg(
+        short = 'Q',
+        long = "query-port",
+        help = "The query port to use (if different from the server port)."
+    )]
+    pub query_port: Option<u16>,
+
+    #[arg(
+        short = 'M',
+        long = "query-monitor",
+        help = "The specific query to monitor when in basic mode.",
+        default_value = "info"
+    )]
+    pub query_monitor: String,
+
+    #[arg(
+        short = 'm',
+        long = "monitor-only",
+        help = "When set, only monitors the specified query type and does not perform any other actions."
+    )]
+    pub use_query_monitor_only: bool,
+
+    #[arg(
+        short = 't',
+        long = "timeout",
+        help = "The timeout in seconds for server queries (default: 5)."
+    )]
+    pub timeout: Option<u64>,
+
+    #[arg(
+        short = 'I',
+        long = "isolate",
+        help = "When set along with the destination IP,port, and query, launches the program and only queries the specified server with no other options."
+    )]
+    pub isolate: bool,
+
+    // Server store settings.
     #[arg(
         short = 'A',
         long = "add",
@@ -84,5 +149,9 @@ impl Args {
         levels_str
             .map(|s| LogLevel::from_str(s).unwrap_or_default())
             .collect()
+    }
+
+    pub fn parse_query_monitor(&self) -> Option<QueryMonitor> {
+        QueryMonitor::from_str(&self.query_monitor)
     }
 }

@@ -9,5 +9,3 @@ pub mod tui;
 
 pub mod context;
 pub mod settings;
-
-pub mod time;

@@ -9,6 +9,11 @@ use crate::server::context::ServerCtx;
 use crate::store::ext::StoreExt;
 
 pub async fn servers_setup_all(ctx: Context) -> Result<()> {
+    // If we're in isolate mode, we don't want to setup all servers.
+    if ctx.args.isolate {
+        return Ok(());
+    }
+
     let servers = {
         let mut store = ctx.store.write().await;
 

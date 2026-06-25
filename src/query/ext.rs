@@ -6,9 +6,24 @@ use crate::{query::types::Query, server::types::Server};
 pub trait QueryExt {
     async fn init(&mut self) -> Result<()>;
 
-    async fn query_info(&mut self, server: &mut Server, timeout: u64) -> Result<u64>;
-    async fn query_users(&mut self, server: &mut Server, timeout: u64) -> Result<u64>;
-    async fn query_vars(&mut self, server: &mut Server, timeout: u64) -> Result<u64>;
+    async fn query_info(
+        &mut self,
+        server: &mut Server,
+        timeout: u64,
+        set_offline: bool,
+    ) -> Result<u64>;
+    async fn query_users(
+        &mut self,
+        server: &mut Server,
+        timeout: u64,
+        set_offline: bool,
+    ) -> Result<u64>;
+    async fn query_vars(
+        &mut self,
+        server: &mut Server,
+        timeout: u64,
+        set_offline: bool,
+    ) -> Result<u64>;
 }
 
 impl QueryExt for Query {
@@ -18,21 +33,36 @@ impl QueryExt for Query {
         }
     }
 
-    async fn query_info(&mut self, server: &mut Server, timeout: u64) -> Result<u64> {
+    async fn query_info(
+        &mut self,
+        server: &mut Server,
+        timeout: u64,
+        set_offline: bool,
+    ) -> Result<u64> {
         match self {
-            Query::A2s(ctx) => ctx.query_info(server, timeout).await,
+            Query::A2s(ctx) => ctx.query_info(server, timeout, set_offline).await,
         }
     }
 
-    async fn query_users(&mut self, server: &mut Server, timeout: u64) -> Result<u64> {
+    async fn query_users(
+        &mut self,
+        server: &mut Server,
+        timeout: u64,
+        set_offline: bool,
+    ) -> Result<u64> {
         match self {
-            Query::A2s(ctx) => ctx.query_users(server, timeout).await,
+            Query::A2s(ctx) => ctx.query_users(server, timeout, set_offline).await,
         }
     }
 
-    async fn query_vars(&mut self, server: &mut Server, timeout: u64) -> Result<u64> {
+    async fn query_vars(
+        &mut self,
+        server: &mut Server,
+        timeout: u64,
+        set_offline: bool,
+    ) -> Result<u64> {
         match self {
-            Query::A2s(ctx) => ctx.query_vars(server, timeout).await,
+            Query::A2s(ctx) => ctx.query_vars(server, timeout, set_offline).await,
         }
     }
 }
