@@ -57,37 +57,46 @@ impl ServerCtx {
                 // Check A2S query type and perform query based off of that.
                 let latency = match latency_type {
                     ServerLatencyType::A2sInfo => {
-                        let mut server = self.server.write().await;
+                        let (ip, port, timeout) = {
+                            let server = self.server.read().await;
 
-                        match query
-                            .query_info(&mut server, query_timeout.clone(), false)
-                            .await
-                        {
+                            (server.ip.clone(), server.port, query_timeout.clone())
+                        };
+
+                        let res = match query.query_info(&ip, port, timeout).await {
                             Ok(v) => v,
                             Err(e) => bail!("Failed to query server info: {}", e),
-                        }
+                        };
+
+                        res.latency
                     }
                     ServerLatencyType::A2sPlayers => {
-                        let mut server = self.server.write().await;
+                        let (ip, port, timeout) = {
+                            let server = self.server.read().await;
 
-                        match query
-                            .query_users(&mut server, query_timeout.clone(), false)
-                            .await
-                        {
+                            (server.ip.clone(), server.port, query_timeout.clone())
+                        };
+
+                        let res = match query.query_users(&ip, port, timeout).await {
                             Ok(v) => v,
                             Err(e) => bail!("Failed to query server users: {}", e),
-                        }
+                        };
+
+                        res.latency
                     }
                     ServerLatencyType::A2sRules => {
-                        let mut server = self.server.write().await;
+                        let (ip, port, timeout) = {
+                            let server = self.server.read().await;
 
-                        match query
-                            .query_vars(&mut server, query_timeout.clone(), false)
-                            .await
-                        {
+                            (server.ip.clone(), server.port, query_timeout.clone())
+                        };
+
+                        let res = match query.query_vars(&ip, port, timeout).await {
                             Ok(v) => v,
                             Err(e) => bail!("Failed to query server vars: {}", e),
-                        }
+                        };
+
+                        res.latency
                     }
                     _ => 0, // Should NOTTT get here lol
                 };

@@ -12,7 +12,7 @@ pub enum ServerStatus {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
 pub enum ServerOs {
     Linux,
     Windows,
@@ -41,9 +41,12 @@ pub struct ServerData {
     pub users_max: u16,
     pub bots_cur: Option<u16>,
 
-    pub server_name: Option<String>,
+    pub srv_name: Option<String>,
     pub game_name: Option<String>,
     pub map_name: Option<String>,
+
+    pub game_id: Option<u16>,
+    pub game_dir: Option<String>,
 
     pub os: Option<ServerOs>,
 
@@ -69,9 +72,11 @@ impl Default for ServerData {
             users_max: 0,
             bots_cur: None,
 
-            server_name: None,
+            srv_name: None,
             game_name: None,
+            game_dir: None,
             map_name: None,
+            game_id: None,
 
             os: None,
 

@@ -7,52 +7,33 @@ use tokio::time::Instant;
 use crate::{
     query::{
         ext::QueryExt,
-        types::a2s::{QueryA2sCtx, QueryA2sStatusCodes},
+        types::{
+            a2s::{QueryA2sCtx, QueryA2sStatusCodes},
+            ext::{InfoResponse, QueryResponse, UsersResponse, VarsResponse},
+        },
     },
-    server::types::{Server, data::ServerStatus},
+    server::types::data::ServerStatus,
 };
 
 use a2s::errors::Error as A2sError;
 
-fn parse_a2s_error(server: &mut Server, e: A2sError, set_offline: bool) -> Result<()> {
+fn parse_a2s_error(e: A2sError) -> Result<(ServerStatus, Option<u16>)> {
     // Check for standard timeout indicating server is offline.
     if matches!(e, A2sError::ErrTimeout) {
-        if set_offline {
-            server.data.status = ServerStatus::Offline;
-        }
-
-        return Ok(());
+        return Ok((ServerStatus::Offline, None));
     }
 
-    if set_offline {
-        server.data.status = ServerStatus::Error;
-    }
+    let code = match e {
+        A2sError::Io(_) => Some(QueryA2sStatusCodes::IoError as u16),
+        A2sError::TryReserveError(_) => Some(QueryA2sStatusCodes::TryReserveError as u16),
+        A2sError::InvalidResponse => Some(QueryA2sStatusCodes::InvalidResponse as u16),
+        A2sError::MismatchID => Some(QueryA2sStatusCodes::MismatchId as u16),
+        A2sError::InvalidBz2Size => Some(QueryA2sStatusCodes::InvalidBz2Size as u16),
+        A2sError::CheckSumMismatch => Some(QueryA2sStatusCodes::ChecksumMismatch as u16),
+        _ => Some(QueryA2sStatusCodes::Other as u16),
+    };
 
-    match e {
-        A2sError::Io(_) => {
-            server.data.status_code = Some(QueryA2sStatusCodes::IoError as u16);
-        }
-        A2sError::TryReserveError(_) => {
-            server.data.status_code = Some(QueryA2sStatusCodes::TryReserveError as u16);
-        }
-        A2sError::InvalidResponse => {
-            server.data.status_code = Some(QueryA2sStatusCodes::InvalidResponse as u16);
-        }
-        A2sError::MismatchID => {
-            server.data.status_code = Some(QueryA2sStatusCodes::MismatchId as u16);
-        }
-        A2sError::InvalidBz2Size => {
-            server.data.status_code = Some(QueryA2sStatusCodes::InvalidBz2Size as u16);
-        }
-        A2sError::CheckSumMismatch => {
-            server.data.status_code = Some(QueryA2sStatusCodes::ChecksumMismatch as u16);
-        }
-        _ => {
-            server.data.status_code = Some(QueryA2sStatusCodes::Other as u16);
-        }
-    }
-
-    Ok(())
+    Ok((ServerStatus::Error, code))
 }
 
 impl QueryExt for QueryA2sCtx {
@@ -66,14 +47,14 @@ impl QueryExt for QueryA2sCtx {
 
     async fn query_info(
         &mut self,
-        server: &mut Server,
+        ip: &str,
+        port: u16,
         timeout: u64,
-        set_offline: bool,
-    ) -> Result<u64> {
-        let data = &mut server.data;
+    ) -> Result<QueryResponse<InfoResponse>> {
+        let mut res = QueryResponse::<InfoResponse>::default();
 
         // Format address.
-        let addr = format!("{}:{}", server.ip, server.port_query.unwrap_or(server.port));
+        let addr = format!("{}:{}", ip, port);
 
         // Set timeout.
         self.cl
@@ -85,49 +66,52 @@ impl QueryExt for QueryA2sCtx {
         // Query server info.
         let info = match self.cl.info(&addr).await {
             Ok(info) => info,
-            Err(e) => match parse_a2s_error(server, e, set_offline) {
-                Ok(_) => return Ok(0),
+            Err(e) => match parse_a2s_error(e) {
+                Ok(q) => {
+                    res.status = q.0;
+                    res.status_code = q.1;
+
+                    return Ok(res);
+                }
                 Err(e) => bail!("Failed to parse A2S error: {}", e),
             },
         };
 
-        let latency = start.elapsed().as_micros() as u64;
+        // Update result with server data and return.
+        res.status = ServerStatus::Online;
+        res.latency = start.elapsed().as_micros() as u64;
 
-        // Update server data.
-        data.server_name = Some(info.name);
-        data.map_name = Some(info.map);
-        data.game_name = Some(info.game);
-
-        data.users_cur = info.players as u16;
-        data.users_max = info.max_players as u16;
-        data.bots_cur = Some(info.bots as u16);
-
-        data.os = Some(info.server_os.into());
-
-        data.is_secure = info.vac;
-        data.is_dedicated = match info.server_type {
-            ServerType::Dedicated => true,
-            _ => false,
+        res.data = InfoResponse {
+            srv_name: Some(info.name),
+            map_name: Some(info.map),
+            game_name: Some(info.game),
+            game_dir: Some(info.folder),
+            game_id: Some(info.app_id as u16),
+            users_cnt: info.players as u16,
+            users_max: info.max_players as u16,
+            bots_cnt: Some(info.bots as u16),
+            os: Some(info.server_os.into()),
+            is_secure: info.vac,
+            is_dedicated: matches!(info.server_type, ServerType::Dedicated),
+            is_public: info.visibility,
+            version: Some(info.version),
         };
-        data.is_public = info.visibility;
 
-        data.version = Some(info.version);
-
-        Ok(latency)
+        Ok(res)
     }
 
     async fn query_users(
         &mut self,
-        server: &mut Server,
+        ip: &str,
+        port: u16,
         timeout: u64,
-        set_offline: bool,
-    ) -> Result<u64> {
-        let data = &mut server.data;
+    ) -> Result<QueryResponse<UsersResponse>> {
+        let mut res = QueryResponse::<UsersResponse>::default();
 
         // Reset current list.
-        data.users = Vec::new();
+        res.data.users = Vec::new();
 
-        let addr = format!("{}:{}", server.ip, server.port_query.unwrap_or(server.port));
+        let addr = format!("{}:{}", ip, port);
 
         // Set timeout on the client.
         self.cl
@@ -137,8 +121,12 @@ impl QueryExt for QueryA2sCtx {
         let start = Instant::now();
         let users = match self.cl.players(&addr).await {
             Ok(users) => users,
-            Err(e) => match parse_a2s_error(server, e, set_offline) {
-                Ok(_) => return Ok(0),
+            Err(e) => match parse_a2s_error(e) {
+                Ok(q) => {
+                    res.status = q.0;
+                    res.status_code = q.1;
+                    return Ok(res);
+                }
                 Err(e) => bail!("Failed to parse A2S error: {}", e),
             },
         };
@@ -146,24 +134,27 @@ impl QueryExt for QueryA2sCtx {
         let latency = start.elapsed().as_micros() as u64;
 
         for user in users {
-            data.users.push(user.into());
+            res.data.users.push(user.into());
         }
 
-        Ok(latency)
+        res.latency = latency;
+        res.status = ServerStatus::Online;
+
+        Ok(res)
     }
 
     async fn query_vars(
         &mut self,
-        server: &mut Server,
+        ip: &str,
+        port: u16,
         timeout: u64,
-        set_offline: bool,
-    ) -> Result<u64> {
-        let data = &mut server.data;
+    ) -> Result<QueryResponse<VarsResponse>> {
+        let mut res = QueryResponse::<VarsResponse>::default();
 
         // Reset current list.
-        data.vars = Vec::new();
+        res.data.vars = Vec::new();
 
-        let addr = format!("{}:{}", server.ip, server.port_query.unwrap_or(server.port));
+        let addr = format!("{}:{}", ip, port);
 
         // Set timeout on the client.
         self.cl
@@ -174,8 +165,12 @@ impl QueryExt for QueryA2sCtx {
 
         let vars = match self.cl.rules(&addr).await {
             Ok(vars) => vars,
-            Err(e) => match parse_a2s_error(server, e, set_offline) {
-                Ok(_) => return Ok(0),
+            Err(e) => match parse_a2s_error(e) {
+                Ok(q) => {
+                    res.status = q.0;
+                    res.status_code = q.1;
+                    return Ok(res);
+                }
                 Err(e) => bail!("Failed to parse A2S error: {}", e),
             },
         };
@@ -183,9 +178,12 @@ impl QueryExt for QueryA2sCtx {
         let latency = start.elapsed().as_micros() as u64;
 
         for var in vars {
-            data.vars.push(var.into());
+            res.data.vars.push(var.into());
         }
 
-        Ok(latency)
+        res.latency = latency;
+        res.status = ServerStatus::Online;
+
+        Ok(res)
     }
 }
