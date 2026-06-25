@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Result, bail};
 
@@ -7,6 +7,7 @@ use crate::{
     log_info,
     logger::level::LogLevel,
     server::{ServerCtx, types::query::ServerQueryType},
+    util::resolve_to_ipv4,
 };
 
 pub async fn check_server_cli(ctx: Context) -> Result<()> {
@@ -46,9 +47,9 @@ pub async fn check_server_cli(ctx: Context) -> Result<()> {
     };
 
     // Convert IP string to Ipv4Addr.
-    let ip = match ip.parse::<Ipv4Addr>() {
-        Ok(ip) => ip,
-        Err(_) => bail!("Malformed address: invalid IP: {}", ip),
+    let ip = match resolve_to_ipv4(&ip) {
+        Some(ip) => ip,
+        None => bail!("Malformed address: invalid IP or hostname: {}", ip),
     };
 
     let query_str = match ctx.args.query {
