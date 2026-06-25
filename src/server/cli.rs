@@ -1,6 +1,6 @@
 use std::{net::Ipv4Addr, sync::Arc};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 
 use crate::{
     context::Context,
@@ -10,20 +10,50 @@ use crate::{
 };
 
 pub async fn check_server_cli(ctx: Context) -> Result<()> {
-    let ip = match ctx.args.dst {
-        Some(ref dst) => dst.parse::<Ipv4Addr>(),
+    let dst = match ctx.args.dst {
+        Some(ref dst) => dst,
         None => return Ok(()),
-    }
-    .map_err(|e| anyhow!("Failed to parse destination IP address: {}", e))?;
+    };
 
-    let port = match ctx.args.port {
-        Some(port) => port,
-        None => return Ok(()),
+    // Retrieve IP and port.
+    let (ip, port) = {
+        // Check if the destination contains a colon, indicating an IP:port format.
+        if dst.contains(':') {
+            let parts: Vec<&str> = dst.split(':').collect();
+
+            if parts.len() != 2 {
+                bail!("Malformed address: {}", dst);
+            }
+
+            let ip = parts[0].to_string();
+            let port_str = parts[1];
+
+            let port = match port_str.parse::<u16>() {
+                Ok(p) => p,
+                Err(_) => bail!("Malformed address: invalid port: {}", port_str),
+            };
+
+            (ip, port)
+        } else {
+            // Otherwise, try to retrieve the port from the CLI arguments.
+            let port = match ctx.args.port {
+                Some(port) => port,
+                None => bail!("Missing port for address: {}", dst),
+            };
+
+            (dst.to_string(), port)
+        }
+    };
+
+    // Convert IP string to Ipv4Addr.
+    let ip = match ip.parse::<Ipv4Addr>() {
+        Ok(ip) => ip,
+        Err(_) => bail!("Malformed address: invalid IP: {}", ip),
     };
 
     let query_str = match ctx.args.query {
         Some(ref q) => q,
-        None => return Ok(()),
+        None => bail!("Missing query type for address: {}", dst),
     };
 
     let query_type = match query_str.parse::<ServerQueryType>() {
