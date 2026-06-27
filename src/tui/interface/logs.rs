@@ -6,11 +6,11 @@ use crate::tui::interface::{
 };
 
 #[derive(Default, Debug, Clone)]
-pub struct TuiInterfaceSettings {}
+pub struct TuiInterfaceLogs {}
 
-impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
+impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
     fn title(&self) -> String {
-        "Settings".to_string()
+        "Logs".to_string()
     }
 
     fn is_top_level(&self) -> bool {
@@ -24,13 +24,13 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
     async fn handle_input(&mut self, key: KeyEvent) -> Result<()> {
         match key.code {
             KeyCode::Char('q') => {
-                // Handle quitting the settings interface
-                println!("Quitting settings interface...");
+                // Handle quitting the logs interface
+                println!("Quitting logs interface...");
                 // Implement logic to switch to another interface or exit
             }
             _ => {
-                // Handle other key events specific to the settings interface
-                println!("Unhandled key event in settings interface: {:?}", key);
+                // Handle other key events specific to the logs interface
+                println!("Unhandled key event in logs interface: {:?}", key);
             }
         }
 
@@ -38,8 +38,8 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
     }
 
     async fn draw(&mut self) -> Result<()> {
-        // Implement the logic to draw the settings interface
-        println!("Drawing settings interface...");
+        // Implement the logic to draw the logs interface
+        println!("Drawing logs interface...");
         Ok(())
     }
 }

@@ -138,6 +138,47 @@ async fn main() {
         }
     }
 
+    // If we're not in basic mode, start the TUI.
+    if !args.basic {
+        let mut tui = ctx.tui.write().await;
+
+        // First set context.
+        tui.set_ctx(ctx.clone());
+
+        // Prepare TUI.
+        log_debug!(logger.write().await, "Preparing TUI...");
+
+        match tui.prepare().await {
+            Ok(_) => {
+                log_debug!(logger.write().await, "Prepared TUI...");
+            }
+            Err(e) => {
+                log_fatal!(logger.write().await, "Failed to prepare TUI: {}", e);
+
+                process::exit(1);
+            }
+        }
+
+        // Now start the TUI.
+        log_info!(logger.write().await, "Starting TUI...");
+
+        let task_id = match Tui::start(ctx.clone()).await {
+            Ok(task_id) => {
+                log_info!(logger.write().await, "Started TUI...");
+
+                task_id
+            }
+            Err(e) => {
+                log_fatal!(logger.write().await, "Failed to start TUI: {}", e);
+
+                process::exit(1);
+            }
+        };
+
+        // Assign the draw task ID.
+        tui.draw_task_id = Some(task_id);
+    }
+
     loop {
         select! {
             _ = ctx.cancel_token.cancelled() => {

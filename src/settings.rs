@@ -8,12 +8,15 @@ use serde_json::Value;
 pub struct Settings {
     #[serde(deserialize_with = "bool_from_str", default)]
     pub query_all_in_bg: bool,
+
+    pub tui_draw_interval: u64,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             query_all_in_bg: true,
+            tui_draw_interval: 1000,
         }
     }
 }

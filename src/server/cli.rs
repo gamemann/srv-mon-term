@@ -6,6 +6,7 @@ use crate::{
     context::Context,
     log_info,
     logger::level::LogLevel,
+    query::Query,
     server::{ServerCtx, types::query::ServerQueryType},
     util::resolve_to_ipv4,
 };
@@ -54,12 +55,18 @@ pub async fn check_server_cli(ctx: Context) -> Result<()> {
 
     let query_str = match ctx.args.query {
         Some(ref q) => q,
-        None => bail!("Missing query type for address: {}", dst),
+        None => &"".to_string(),
     };
 
     let query_type = match query_str.parse::<ServerQueryType>() {
         Ok(q) => Some(q),
-        Err(_) => bail!("Invalid query type: {}", query_str),
+        Err(_) => match Query::get_query_type_from_port(port) {
+            Some(q) => Some(q),
+            None => bail!(
+                "Failed to determine query type from port {}. Please specify a specific query type via -q or --query.",
+                port
+            ),
+        },
     };
 
     log_info!(

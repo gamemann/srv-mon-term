@@ -94,19 +94,19 @@ pub struct Args {
     pub query_port: Option<u16>,
 
     #[arg(
+        short = 'm',
+        long = "monitor-only",
+        help = "When set, only monitors the specified query type and does not perform any other actions."
+    )]
+    pub use_query_monitor_only: bool,
+
+    #[arg(
         short = 'M',
         long = "query-monitor",
         help = "The specific query to monitor when in basic mode.",
         default_value = "info"
     )]
     pub query_monitor: String,
-
-    #[arg(
-        short = 'm',
-        long = "monitor-only",
-        help = "When set, only monitors the specified query type and does not perform any other actions."
-    )]
-    pub use_query_monitor_only: bool,
 
     #[arg(
         short = 't',

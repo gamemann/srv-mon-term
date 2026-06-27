@@ -2,7 +2,10 @@ use a2s::A2SClient;
 use anyhow::{Result, bail};
 
 use crate::{
-    query::types::{Query, a2s::QueryA2sCtx},
+    query::{
+        port::PortRange,
+        types::{Query, a2s::QueryA2sCtx},
+    },
     server::types::query::ServerQueryType,
 };
 
@@ -18,5 +21,18 @@ impl Query {
                 Ok(Query::A2s(QueryA2sCtx::new(cl)))
             }
         }
+    }
+
+    pub fn get_query_type_from_port(port: u16) -> Option<ServerQueryType> {
+        if (PortRange {
+            start: 27015,
+            end: Some(27030),
+        }
+        .contains(port))
+        {
+            return Some(ServerQueryType::A2s);
+        }
+
+        None
     }
 }
