@@ -27,7 +27,7 @@ async fn main() {
     let log_levels = args.parse_log_levels();
 
     // Initialize logger.
-    let mut logger = Logger::new(log_levels, None, args.basic);
+    let mut logger = Logger::new(log_levels, args.log_path.clone(), args.basic).await;
 
     log_info!(logger, "Starting srv-mon-term...");
     log_info!(logger, "Initialized logger...");
@@ -188,6 +188,15 @@ async fn main() {
                 break;
             }
         }
+    }
+
+    // Before anything, clean up our TUI if it was started.
+    if !args.basic {
+        let mut tui = ctx.tui.write().await;
+
+        log_info!(logger.write().await, "Cleaning up TUI...");
+
+        tui.cleanup().await;
     }
 
     // Shut down scheduler.

@@ -3,11 +3,19 @@ pub mod latency;
 pub mod users;
 pub mod vars;
 
-use anyhow::Result;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use std::io::Stdout;
 
-use crate::tui::interface::{
-    context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType,
+use anyhow::Result;
+use ratatui::{
+    Frame, Terminal,
+    backend::CrosstermBackend,
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::Rect,
+};
+
+use crate::{
+    context::Context,
+    tui::interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
 };
 
 #[derive(Default, Debug, Clone)]
@@ -22,11 +30,19 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
         false
     }
 
+    fn get_type(&self) -> TuiInterfaceType {
+        TuiInterfaceType::ServerView
+    }
+
     fn parent(&self) -> Option<TuiInterfaceType> {
         Some(TuiInterfaceType::Dashboard)
     }
 
-    async fn handle_input(&mut self, key: KeyEvent) -> Result<()> {
+    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
+        vec![("ESC", "Back")]
+    }
+
+    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
         match key.code {
             KeyCode::Char('q') => {
                 // Handle quitting the server view interface
@@ -42,9 +58,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
         Ok(())
     }
 
-    async fn draw(&mut self) -> Result<()> {
+    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {
         // Implement the logic to draw the server view interface
-        println!("Drawing server view interface...");
-        Ok(())
     }
 }

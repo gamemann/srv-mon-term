@@ -1,12 +1,28 @@
-use anyhow::Result;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use std::io::Stdout;
 
-use crate::tui::interface::{
-    context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType,
+use anyhow::Result;
+use ratatui::{
+    Frame, Terminal,
+    backend::CrosstermBackend,
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::Rect,
+};
+
+use crate::{
+    context::Context,
+    tui::interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
 };
 
 #[derive(Default, Debug, Clone)]
-pub struct TuiInterfaceServerSettings {}
+pub struct TuiInterfaceServerSettings {
+    pub server_id: String,
+}
+
+impl TuiInterfaceServerSettings {
+    pub fn new(server_id: String) -> Self {
+        Self { server_id }
+    }
+}
 
 impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerSettings> {
     fn title(&self) -> String {
@@ -17,11 +33,19 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerSettings> {
         false
     }
 
+    fn get_type(&self) -> TuiInterfaceType {
+        TuiInterfaceType::ServerSettings
+    }
+
     fn parent(&self) -> Option<TuiInterfaceType> {
         Some(TuiInterfaceType::ServerView)
     }
 
-    async fn handle_input(&mut self, key: KeyEvent) -> Result<()> {
+    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
+        vec![("ESC", "Back")]
+    }
+
+    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
         match key.code {
             KeyCode::Char('q') => {
                 // Handle quitting the server settings interface
@@ -40,9 +64,5 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerSettings> {
         Ok(())
     }
 
-    async fn draw(&mut self) -> Result<()> {
-        // Implement the logic to draw the server settings interface
-        println!("Drawing server settings interface...");
-        Ok(())
-    }
+    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {}
 }

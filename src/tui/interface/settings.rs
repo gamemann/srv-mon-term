@@ -1,8 +1,16 @@
-use anyhow::Result;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use std::io::Stdout;
 
-use crate::tui::interface::{
-    context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType,
+use anyhow::Result;
+use ratatui::{
+    Frame, Terminal,
+    backend::CrosstermBackend,
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::Rect,
+};
+
+use crate::{
+    context::Context,
+    tui::interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
 };
 
 #[derive(Default, Debug, Clone)]
@@ -17,29 +25,34 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
         true
     }
 
+    fn get_type(&self) -> TuiInterfaceType {
+        TuiInterfaceType::Settings
+    }
+
     fn parent(&self) -> Option<TuiInterfaceType> {
         None
     }
 
-    async fn handle_input(&mut self, key: KeyEvent) -> Result<()> {
+    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
+        vec![(
+            "ESC",
+            "
+        Quit",
+        )]
+    }
+
+    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
         match key.code {
-            KeyCode::Char('q') => {
-                // Handle quitting the settings interface
-                println!("Quitting settings interface...");
-                // Implement logic to switch to another interface or exit
+            KeyCode::Esc | KeyCode::Char('q') => {
+                ctx.cancel_token.cancel();
             }
-            _ => {
-                // Handle other key events specific to the settings interface
-                println!("Unhandled key event in settings interface: {:?}", key);
-            }
+            _ => {}
         }
 
         Ok(())
     }
 
-    async fn draw(&mut self) -> Result<()> {
+    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {
         // Implement the logic to draw the settings interface
-        println!("Drawing settings interface...");
-        Ok(())
     }
 }

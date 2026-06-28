@@ -6,10 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::{
     context::Context,
-    tui::{
-        interface::types::{TuiInterface, TuiInterfaceType},
-        types::{Tui, state::TuiState},
-    },
+    tui::types::{Tui, state::TuiState},
 };
 
 impl Tui {
@@ -18,8 +15,6 @@ impl Tui {
             ctx: None,
             term: None,
             draw_task_id: None,
-
-            interface: RwLock::new(TuiInterface::new_interface(TuiInterfaceType::Dashboard)),
 
             state: RwLock::new(TuiState::default()),
         }
@@ -36,9 +31,9 @@ impl Tui {
             .ok_or_else(|| anyhow!("Failed to upgrade context"))
     }
 
-    pub fn terminal(&self) -> Result<&Terminal<CrosstermBackend<Stdout>>> {
+    pub fn terminal(&mut self) -> Result<&mut Terminal<CrosstermBackend<Stdout>>> {
         self.term
-            .as_ref()
+            .as_mut()
             .ok_or_else(|| anyhow!("Terminal not initialized"))
     }
 }

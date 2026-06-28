@@ -37,13 +37,6 @@ impl Logger {
             let path = now.format(path_fmt).to_string();
             let path = PathBuf::from(path);
 
-            // Ensure the parent directory exists.
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)
-                    .await
-                    .map_err(|e| anyhow!("Failed to create log file parent directories: {}", e))?;
-            }
-
             // Open the file in append mode, creating it if it doesn't exist.
             let mut file = fs::OpenOptions::new()
                 .create(true)

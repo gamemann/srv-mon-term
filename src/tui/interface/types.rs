@@ -1,12 +1,19 @@
-use crate::tui::interface::{
-    context::TuiInterfaceContext,
-    dashboard::TuiInterfaceDashboard,
-    ext::TuiInterfaceExt,
-    logs::TuiInterfaceLogs,
-    server::{settings::TuiInterfaceServerSettings, view::TuiInterfaceServerView},
-    settings::TuiInterfaceSettings,
+use anyhow::Result;
+use ratatui::{Frame, layout::Rect};
+
+use crate::{
+    context::Context,
+    tui::interface::{
+        context::TuiInterfaceContext,
+        dashboard::TuiInterfaceDashboard,
+        ext::TuiInterfaceExt,
+        logs::TuiInterfaceLogs,
+        server::{settings::TuiInterfaceServerSettings, view::TuiInterfaceServerView},
+        settings::TuiInterfaceSettings,
+    },
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TuiInterfaceType {
     Dashboard,
     Logs,
@@ -48,6 +55,17 @@ impl TuiInterfaceExt for TuiInterface {
         }
     }
 
+    fn get_type(&self) -> TuiInterfaceType {
+        match self {
+            TuiInterface::Dashboard(ctx) => ctx.get_type(),
+            TuiInterface::Logs(ctx) => ctx.get_type(),
+            TuiInterface::Settings(ctx) => ctx.get_type(),
+
+            TuiInterface::ServerView(ctx) => ctx.get_type(),
+            TuiInterface::ServerSettings(ctx) => ctx.get_type(),
+        }
+    }
+
     fn parent(&self) -> Option<TuiInterfaceType> {
         match self {
             TuiInterface::Dashboard(ctx) => ctx.parent(),
@@ -59,26 +77,38 @@ impl TuiInterfaceExt for TuiInterface {
         }
     }
 
-    async fn handle_input(
-        &mut self,
-        key: ratatui::crossterm::event::KeyEvent,
-    ) -> anyhow::Result<()> {
+    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
         match self {
-            TuiInterface::Dashboard(ctx) => ctx.handle_input(key).await,
-            TuiInterface::Logs(ctx) => ctx.handle_input(key).await,
-            TuiInterface::Settings(ctx) => ctx.handle_input(key).await,
-            TuiInterface::ServerView(ctx) => ctx.handle_input(key).await,
-            TuiInterface::ServerSettings(ctx) => ctx.handle_input(key).await,
+            TuiInterface::Dashboard(ctx) => ctx.get_key_bindings(),
+            TuiInterface::Logs(ctx) => ctx.get_key_bindings(),
+            TuiInterface::Settings(ctx) => ctx.get_key_bindings(),
+
+            TuiInterface::ServerView(ctx) => ctx.get_key_bindings(),
+            TuiInterface::ServerSettings(ctx) => ctx.get_key_bindings(),
         }
     }
 
-    async fn draw(&mut self) -> anyhow::Result<()> {
+    async fn handle_input(
+        &mut self,
+        key: ratatui::crossterm::event::KeyEvent,
+        ctx: Context,
+    ) -> Result<()> {
         match self {
-            TuiInterface::Dashboard(ctx) => ctx.draw().await,
-            TuiInterface::Logs(ctx) => ctx.draw().await,
-            TuiInterface::Settings(ctx) => ctx.draw().await,
-            TuiInterface::ServerView(ctx) => ctx.draw().await,
-            TuiInterface::ServerSettings(ctx) => ctx.draw().await,
+            TuiInterface::Dashboard(ictx) => ictx.handle_input(key, ctx).await,
+            TuiInterface::Logs(ictx) => ictx.handle_input(key, ctx).await,
+            TuiInterface::Settings(ictx) => ictx.handle_input(key, ctx).await,
+            TuiInterface::ServerView(ictx) => ictx.handle_input(key, ctx).await,
+            TuiInterface::ServerSettings(ictx) => ictx.handle_input(key, ctx).await,
+        }
+    }
+
+    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {
+        match self {
+            TuiInterface::Dashboard(ictx) => ictx.draw(frame, area, ctx),
+            TuiInterface::Logs(ictx) => ictx.draw(frame, area, ctx),
+            TuiInterface::Settings(ictx) => ictx.draw(frame, area, ctx),
+            TuiInterface::ServerView(ictx) => ictx.draw(frame, area, ctx),
+            TuiInterface::ServerSettings(ictx) => ictx.draw(frame, area, ctx),
         }
     }
 }

@@ -1,6 +1,13 @@
-use crate::tui::interface::types::TuiInterface;
+use crate::tui::interface::types::{TuiInterface, TuiInterfaceType};
 
-#[derive(Default)]
 pub struct TuiState {
-    pub interface: Option<TuiInterface>,
+    pub interface: TuiInterface,
+}
+
+impl Default for TuiState {
+    fn default() -> Self {
+        TuiState {
+            interface: TuiInterface::new_interface(TuiInterfaceType::Dashboard),
+        }
+    }
 }

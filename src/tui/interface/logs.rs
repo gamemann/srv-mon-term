@@ -1,8 +1,16 @@
-use anyhow::Result;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use std::io::Stdout;
 
-use crate::tui::interface::{
-    context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType,
+use anyhow::Result;
+use ratatui::{
+    Frame, Terminal,
+    backend::CrosstermBackend,
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::Rect,
+};
+
+use crate::{
+    context::Context,
+    tui::interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
 };
 
 #[derive(Default, Debug, Clone)]
@@ -17,29 +25,32 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
         true
     }
 
+    fn get_type(&self) -> TuiInterfaceType {
+        TuiInterfaceType::Logs
+    }
+
     fn parent(&self) -> Option<TuiInterfaceType> {
         None
     }
 
-    async fn handle_input(&mut self, key: KeyEvent) -> Result<()> {
+    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
+        vec![(
+            "ESC",
+            "
+        Quit",
+        )]
+    }
+
+    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
         match key.code {
-            KeyCode::Char('q') => {
-                // Handle quitting the logs interface
-                println!("Quitting logs interface...");
-                // Implement logic to switch to another interface or exit
+            KeyCode::Esc | KeyCode::Char('q') => {
+                ctx.cancel_token.cancel();
             }
-            _ => {
-                // Handle other key events specific to the logs interface
-                println!("Unhandled key event in logs interface: {:?}", key);
-            }
+            _ => {}
         }
 
         Ok(())
     }
 
-    async fn draw(&mut self) -> Result<()> {
-        // Implement the logic to draw the logs interface
-        println!("Drawing logs interface...");
-        Ok(())
-    }
+    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {}
 }
