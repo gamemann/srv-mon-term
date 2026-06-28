@@ -1,9 +1,6 @@
-use std::io::Stdout;
-
 use anyhow::Result;
 use ratatui::{
-    Frame, Terminal,
-    backend::CrosstermBackend,
+    Frame,
     crossterm::event::{KeyCode, KeyEvent},
     layout::Rect,
 };
@@ -34,11 +31,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
     }
 
     fn get_key_bindings(&self) -> Vec<(&str, &str)> {
-        vec![(
-            "ESC",
-            "
-        Quit",
-        )]
+        vec![("Esc", "Quit")]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {

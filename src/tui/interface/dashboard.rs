@@ -1,6 +1,6 @@
 pub mod server;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use ratatui::{
     Frame,
     crossterm::event::{KeyCode, KeyEvent},
@@ -11,10 +11,14 @@ use ratatui::{
 
 use crate::{
     context::Context,
+    log_debug, log_info,
+    logger::level::LogLevel,
     tui::interface::{
         context::TuiInterfaceContext,
         dashboard::server::{ROW_HEIGHT, draw_server_row},
         ext::TuiInterfaceExt,
+        new::TuiInterfaceOpts,
+        server::view::ServerViewOpts,
         types::TuiInterfaceType,
     },
 };
@@ -48,11 +52,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
     }
 
     fn get_key_bindings(&self) -> Vec<(&str, &str)> {
-        vec![(
-            "ESC",
-            "
-        Quit",
-        )]
+        vec![("Esc", "Quit")]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
@@ -70,6 +70,63 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.interface.selected += 1;
+            }
+
+            // Handle selecting a server.
+            KeyCode::Enter => {
+                log_debug!(
+                    ctx.logger.write().await,
+                    "Enter key pressed in dashboard interface"
+                );
+
+                // Attempt to read servers list.
+                let servers = match ctx.servers.try_read() {
+                    Ok(guard) => guard,
+                    Err(_) => return Ok(()),
+                };
+
+                // Retrieve the selected index, ensuring it is within bounds of the servers list.
+                let selected = self.interface.selected.min(servers.len().saturating_sub(1));
+
+                log_debug!(
+                    ctx.logger.write().await,
+                    "Selected server index: {}",
+                    selected
+                );
+
+                // Try to read the server context, if we can't, skip this server.
+                let srv_ctx = match servers.get(selected) {
+                    Some(ctx) => ctx.clone(),
+                    None => return Ok(()),
+                };
+
+                log_debug!(
+                    ctx.logger.write().await,
+                    "Switching to server view interface for server ID: '{}'",
+                    srv_ctx.id
+                );
+
+                // Change to the server view interface.
+                let tui = ctx.tui.read().await;
+
+                match tui
+                    .change_interface(
+                        TuiInterfaceType::ServerView,
+                        Some(TuiInterfaceOpts::ServerView(ServerViewOpts::new(
+                            srv_ctx.id.clone(),
+                        ))),
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        log_info!(
+                            ctx.logger.write().await,
+                            "Switched to server view interface for server ID: '{}'",
+                            srv_ctx.id
+                        );
+                    }
+                    Err(e) => bail!("Failed to change interface to ServerView: {}", e),
+                }
             }
 
             _ => {}

@@ -10,6 +10,7 @@ use crate::{
     tui::{
         interface::{
             ext::TuiInterfaceExt,
+            new::TuiInterfaceOpts,
             types::{TuiInterface, TuiInterfaceType},
         },
         types::Tui,
@@ -23,11 +24,18 @@ impl Tui {
         tokio::spawn(async move {
             let ctx = task_ctx.clone();
 
-            loop {
-                let tui = ctx.tui.read().await;
-                let mut state = tui.state.write().await;
+            // Retrieve poll interval.
+            let poll_interval = ctx.settings.read().await.tui_input_poll_interval;
 
-                match event::poll(Duration::from_millis(100)) {
+            loop {
+                let current_type = {
+                    let tui = ctx.tui.read().await;
+                    let state = tui.state.read().await;
+
+                    state.interface.get_type().clone()
+                };
+
+                match event::poll(Duration::from_millis(poll_interval)) {
                     Ok(true) => {
                         let ev = match event::read() {
                             Ok(ev) => ev,
@@ -55,10 +63,8 @@ impl Tui {
                                 }
                                 // F1: Dashboard interface.
                                 event::KeyCode::F(1) => {
-                                    let interface = &mut state.interface;
-
                                     // If we're not on Dashboard, switch to it.
-                                    if interface.get_type() == TuiInterfaceType::Dashboard {
+                                    if current_type == TuiInterfaceType::Dashboard {
                                         log_trace!(
                                             ctx.logger.write().await,
                                             "Already on Dashboard interface, ignoring F1 input event."
@@ -69,18 +75,32 @@ impl Tui {
                                             "Switching to Dashboard interface due to F1 input event."
                                         );
 
-                                        // Switch to Dashboard interface.
-                                        state.interface = TuiInterface::new_interface(
-                                            TuiInterfaceType::Dashboard,
-                                        );
+                                        let tui = ctx.tui.read().await;
+
+                                        match tui
+                                            .change_interface(TuiInterfaceType::Dashboard, None)
+                                            .await
+                                        {
+                                            Ok(_) => {
+                                                log_trace!(
+                                                    ctx.logger.write().await,
+                                                    "Switched to Dashboard interface due to F1 input event."
+                                                );
+                                            }
+                                            Err(e) => {
+                                                log_error!(
+                                                    ctx.logger.write().await,
+                                                    "Failed to switch to Dashboard interface due to F1 input event: {}",
+                                                    e
+                                                );
+                                            }
+                                        }
                                     }
                                 }
                                 // F2: Settings interface.
                                 event::KeyCode::F(2) => {
-                                    let interface = &mut state.interface;
-
                                     // If we're not on Settings, switch to it.
-                                    if interface.get_type() == TuiInterfaceType::Settings {
+                                    if current_type == TuiInterfaceType::Settings {
                                         log_trace!(
                                             ctx.logger.write().await,
                                             "Already on Settings interface, ignoring F2 input event."
@@ -91,17 +111,32 @@ impl Tui {
                                             "Switching to Settings interface due to F2 input event."
                                         );
 
-                                        // Switch to Settings interface.
-                                        state.interface =
-                                            TuiInterface::new_interface(TuiInterfaceType::Settings);
+                                        let tui = ctx.tui.read().await;
+
+                                        match tui
+                                            .change_interface(TuiInterfaceType::Settings, None)
+                                            .await
+                                        {
+                                            Ok(_) => {
+                                                log_trace!(
+                                                    ctx.logger.write().await,
+                                                    "Switched to Settings interface due to F2 input event."
+                                                );
+                                            }
+                                            Err(e) => {
+                                                log_error!(
+                                                    ctx.logger.write().await,
+                                                    "Failed to switch to Settings interface due to F2 input event: {}",
+                                                    e
+                                                );
+                                            }
+                                        }
                                     }
                                 }
                                 // F3: Logs interface.
                                 event::KeyCode::F(3) => {
-                                    let interface = &mut state.interface;
-
                                     // If we're not on Logs, switch to it.
-                                    if interface.get_type() == TuiInterfaceType::Logs {
+                                    if current_type == TuiInterfaceType::Logs {
                                         log_trace!(
                                             ctx.logger.write().await,
                                             "Already on Logs interface, ignoring F3 input event."
@@ -112,9 +147,64 @@ impl Tui {
                                             "Switching to Logs interface due to F3 input event."
                                         );
 
+                                        let tui = ctx.tui.read().await;
+
                                         // Switch to Logs interface.
-                                        state.interface =
-                                            TuiInterface::new_interface(TuiInterfaceType::Logs);
+                                        match tui
+                                            .change_interface(TuiInterfaceType::Logs, None)
+                                            .await
+                                        {
+                                            Ok(_) => {
+                                                log_trace!(
+                                                    ctx.logger.write().await,
+                                                    "Switched to Logs interface due to F3 input event."
+                                                );
+                                            }
+                                            Err(e) => {
+                                                log_error!(
+                                                    ctx.logger.write().await,
+                                                    "Failed to switch to Logs interface due to F3 input event: {}",
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                // F4: About interface.
+                                event::KeyCode::F(4) => {
+                                    // If we're not on About, switch to it.
+                                    if current_type == TuiInterfaceType::About {
+                                        log_trace!(
+                                            ctx.logger.write().await,
+                                            "Already on About interface, ignoring F4 input event."
+                                        );
+                                    } else {
+                                        log_trace!(
+                                            ctx.logger.write().await,
+                                            "Switching to About interface due to F4 input event."
+                                        );
+
+                                        let tui = ctx.tui.read().await;
+
+                                        // Switch to About interface.
+                                        match tui
+                                            .change_interface(TuiInterfaceType::About, None)
+                                            .await
+                                        {
+                                            Ok(_) => {
+                                                log_trace!(
+                                                    ctx.logger.write().await,
+                                                    "Switched to About interface due to F4 input event."
+                                                );
+                                            }
+                                            Err(e) => {
+                                                log_error!(
+                                                    ctx.logger.write().await,
+                                                    "Failed to switch to About interface due to F4 input event: {}",
+                                                    e
+                                                );
+                                            }
+                                        }
                                     }
                                 }
                                 _ => {}
@@ -122,22 +212,23 @@ impl Tui {
 
                             // Check our state and if we have an interface set, pass our input to it.
                             {
-                                let interface = &mut state.interface;
+                                let tui = ctx.tui.read().await;
+                                let mut state = tui.state.write().await;
 
-                                match interface.handle_input(key, ctx.clone()).await {
+                                match state.interface.handle_input(key, ctx.clone()).await {
                                     Ok(_) => {
                                         log_trace!(
                                             ctx.logger.write().await,
                                             "Handled input event '{:?}' for interface: {}",
                                             key,
-                                            interface.title()
+                                            state.interface.title()
                                         );
                                     }
                                     Err(e) => {
                                         log_error!(
                                             ctx.logger.write().await,
                                             "Failed to handle input event for interface '{}': {}",
-                                            interface.title(),
+                                            state.interface.title(),
                                             e
                                         );
                                     }

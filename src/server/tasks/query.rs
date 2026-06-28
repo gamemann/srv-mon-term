@@ -40,7 +40,7 @@ impl ServerCtx {
 
                     let addr = format!("{}:{}", server.ip.clone(), server.port);
 
-                    let id = server.id.clone().unwrap_or("N/A".to_string());
+                    let id = server.id.clone();
 
                     (addr, id)
                 };

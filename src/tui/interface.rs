@@ -1,7 +1,11 @@
 pub mod context;
-pub mod dashboard;
 pub mod ext;
-pub mod logs;
-pub mod server;
-pub mod settings;
+pub mod new;
 pub mod types;
+
+pub mod about;
+pub mod dashboard;
+pub mod logs;
+pub mod settings;
+
+pub mod server;

@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::server::types::{Server, latency::ServerLatency, tasks::ServerTasks};
 
@@ -13,6 +14,7 @@ use crate::context::Context;
 use crate::store::ext::StoreExt;
 
 pub struct ServerCtx {
+    pub id: String,
     pub server: RwLock<Server>,
 
     pub tasks: RwLock<ServerTasks>,
@@ -21,8 +23,12 @@ pub struct ServerCtx {
 
 impl ServerCtx {
     pub fn new(ip: String, port: u16, port_query: Option<u16>) -> Self {
+        // Create the server first so we can get its ID for the ServerCtx.
+        let server = Server::new(ip, port, port_query);
+
         Self {
-            server: RwLock::new(Server::new(ip, port, port_query)),
+            id: server.id.clone(),
+            server: RwLock::new(server),
             tasks: RwLock::new(ServerTasks::default()),
             latency: RwLock::new(VecDeque::new()),
         }
@@ -45,6 +51,7 @@ impl ServerCtx {
             .map_err(|_| anyhow!("Malformed address: invalid port"))?;
 
         Ok(Self {
+            id: Uuid::now_v7().to_string(),
             server: RwLock::new(Server::new(ip, port, None)),
             tasks: RwLock::new(ServerTasks::default()),
             latency: RwLock::new(VecDeque::new()),
@@ -54,21 +61,23 @@ impl ServerCtx {
     pub async fn get_server_ctx(ctx: Context, server: &Server) -> Result<Arc<Self>> {
         let servers = ctx.servers.read().await;
 
-        let mut srv_ctx = None;
+        servers
+            .iter()
+            .find(|s| s.id == server.id)
+            .cloned()
+            .ok_or_else(|| anyhow!("Failed to find server context"))
+    }
 
-        for s in servers.iter() {
-            let srv = s.server.read().await;
+    pub async fn get_server_ctx_by_id(ctx: Context, id: &str) -> Result<Arc<Self>> {
+        let servers = ctx.servers.read().await;
 
-            if srv.ip == server.ip && srv.port == server.port {
-                srv_ctx = Some(s);
+        let srv_ctx = servers
+            .iter()
+            .find(|s| s.id == id)
+            .cloned()
+            .ok_or_else(|| anyhow!("Failed to find server context"))?;
 
-                break;
-            }
-        }
-
-        let srv_ctx = srv_ctx.ok_or_else(|| anyhow!("Failed to find server context"))?;
-
-        Ok(srv_ctx.clone())
+        Ok(srv_ctx)
     }
 
     pub async fn get_server_ctx_by_addr(ctx: Context, ip: &str, port: u16) -> Result<Arc<Self>> {
@@ -109,7 +118,7 @@ impl ServerCtx {
                 let ip = s.ip.clone();
                 let port = s.port;
 
-                if (id.is_some() && id == my_id) || (ip == my_ip && port == my_port) {
+                if id == my_id || (ip == my_ip && port == my_port) {
                     return Some(index);
                 }
             }

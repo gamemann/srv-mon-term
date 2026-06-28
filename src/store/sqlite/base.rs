@@ -109,7 +109,7 @@ impl StoreExt for StoreCtx<SqliteStore> {
             {
                 // Convert the row into a Server struct.
                 let server = Server {
-                    id: Some(id.to_string()),
+                    id: id.to_string(),
                     name: row
                         .get(0)
                         .map_err(|e| anyhow!("Failed to get name from row: {}", e))?,

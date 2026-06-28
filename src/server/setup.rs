@@ -33,6 +33,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
 
         // Push server to context.
         ctx.servers.write().await.push(Arc::new(ServerCtx {
+            id: server.id.clone(),
             server: RwLock::new(server.clone()),
             tasks: Default::default(),
             latency: Default::default(),

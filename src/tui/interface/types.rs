@@ -4,6 +4,7 @@ use ratatui::{Frame, layout::Rect};
 use crate::{
     context::Context,
     tui::interface::{
+        about::TuiInterfaceAbout,
         context::TuiInterfaceContext,
         dashboard::TuiInterfaceDashboard,
         ext::TuiInterfaceExt,
@@ -18,6 +19,7 @@ pub enum TuiInterfaceType {
     Dashboard,
     Logs,
     Settings,
+    About,
 
     ServerView,
     ServerSettings,
@@ -27,6 +29,7 @@ pub enum TuiInterface {
     Dashboard(TuiInterfaceContext<TuiInterfaceDashboard>),
     Logs(TuiInterfaceContext<TuiInterfaceLogs>),
     Settings(TuiInterfaceContext<TuiInterfaceSettings>),
+    About(TuiInterfaceContext<TuiInterfaceAbout>),
 
     ServerView(TuiInterfaceContext<TuiInterfaceServerView>),
     ServerSettings(TuiInterfaceContext<TuiInterfaceServerSettings>),
@@ -38,7 +41,7 @@ impl TuiInterfaceExt for TuiInterface {
             TuiInterface::Dashboard(ctx) => ctx.title(),
             TuiInterface::Logs(ctx) => ctx.title(),
             TuiInterface::Settings(ctx) => ctx.title(),
-
+            TuiInterface::About(ctx) => ctx.title(),
             TuiInterface::ServerView(ctx) => ctx.title(),
             TuiInterface::ServerSettings(ctx) => ctx.title(),
         }
@@ -49,7 +52,7 @@ impl TuiInterfaceExt for TuiInterface {
             TuiInterface::Dashboard(ctx) => ctx.is_top_level(),
             TuiInterface::Logs(ctx) => ctx.is_top_level(),
             TuiInterface::Settings(ctx) => ctx.is_top_level(),
-
+            TuiInterface::About(ctx) => ctx.is_top_level(),
             TuiInterface::ServerView(ctx) => ctx.is_top_level(),
             TuiInterface::ServerSettings(ctx) => ctx.is_top_level(),
         }
@@ -60,7 +63,7 @@ impl TuiInterfaceExt for TuiInterface {
             TuiInterface::Dashboard(ctx) => ctx.get_type(),
             TuiInterface::Logs(ctx) => ctx.get_type(),
             TuiInterface::Settings(ctx) => ctx.get_type(),
-
+            TuiInterface::About(ctx) => ctx.get_type(),
             TuiInterface::ServerView(ctx) => ctx.get_type(),
             TuiInterface::ServerSettings(ctx) => ctx.get_type(),
         }
@@ -71,7 +74,7 @@ impl TuiInterfaceExt for TuiInterface {
             TuiInterface::Dashboard(ctx) => ctx.parent(),
             TuiInterface::Logs(ctx) => ctx.parent(),
             TuiInterface::Settings(ctx) => ctx.parent(),
-
+            TuiInterface::About(ctx) => ctx.parent(),
             TuiInterface::ServerView(ctx) => ctx.parent(),
             TuiInterface::ServerSettings(ctx) => ctx.parent(),
         }
@@ -82,7 +85,7 @@ impl TuiInterfaceExt for TuiInterface {
             TuiInterface::Dashboard(ctx) => ctx.get_key_bindings(),
             TuiInterface::Logs(ctx) => ctx.get_key_bindings(),
             TuiInterface::Settings(ctx) => ctx.get_key_bindings(),
-
+            TuiInterface::About(ctx) => ctx.get_key_bindings(),
             TuiInterface::ServerView(ctx) => ctx.get_key_bindings(),
             TuiInterface::ServerSettings(ctx) => ctx.get_key_bindings(),
         }
@@ -97,6 +100,7 @@ impl TuiInterfaceExt for TuiInterface {
             TuiInterface::Dashboard(ictx) => ictx.handle_input(key, ctx).await,
             TuiInterface::Logs(ictx) => ictx.handle_input(key, ctx).await,
             TuiInterface::Settings(ictx) => ictx.handle_input(key, ctx).await,
+            TuiInterface::About(ictx) => ictx.handle_input(key, ctx).await,
             TuiInterface::ServerView(ictx) => ictx.handle_input(key, ctx).await,
             TuiInterface::ServerSettings(ictx) => ictx.handle_input(key, ctx).await,
         }
@@ -107,20 +111,9 @@ impl TuiInterfaceExt for TuiInterface {
             TuiInterface::Dashboard(ictx) => ictx.draw(frame, area, ctx),
             TuiInterface::Logs(ictx) => ictx.draw(frame, area, ctx),
             TuiInterface::Settings(ictx) => ictx.draw(frame, area, ctx),
+            TuiInterface::About(ictx) => ictx.draw(frame, area, ctx),
             TuiInterface::ServerView(ictx) => ictx.draw(frame, area, ctx),
             TuiInterface::ServerSettings(ictx) => ictx.draw(frame, area, ctx),
-        }
-    }
-}
-
-impl TuiInterface {
-    pub fn new_interface(interface_type: TuiInterfaceType) -> Self {
-        match interface_type {
-            TuiInterfaceType::Dashboard => Self::Dashboard(TuiInterfaceContext::new()),
-            TuiInterfaceType::Logs => Self::Logs(TuiInterfaceContext::new()),
-            TuiInterfaceType::Settings => Self::Settings(TuiInterfaceContext::new()),
-            TuiInterfaceType::ServerView => Self::ServerView(TuiInterfaceContext::new()),
-            TuiInterfaceType::ServerSettings => Self::ServerSettings(TuiInterfaceContext::new()),
         }
     }
 }

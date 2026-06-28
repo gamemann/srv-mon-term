@@ -1,21 +1,34 @@
-use std::io::Stdout;
-
-use anyhow::Result;
+use anyhow::{Result, bail};
 use ratatui::{
-    Frame, Terminal,
-    backend::CrosstermBackend,
+    Frame,
     crossterm::event::{KeyCode, KeyEvent},
     layout::Rect,
 };
 
 use crate::{
     context::Context,
-    tui::interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
+    tui::interface::{
+        context::TuiInterfaceContext, ext::TuiInterfaceExt, new::TuiInterfaceOpts,
+        server::view::ServerViewOpts, types::TuiInterfaceType,
+    },
 };
+
+#[derive(Debug, Clone)]
+pub struct ServerSettingsOpts {
+    pub server_id: String,
+}
 
 #[derive(Default, Debug, Clone)]
 pub struct TuiInterfaceServerSettings {
     pub server_id: String,
+}
+
+impl From<ServerSettingsOpts> for TuiInterfaceServerSettings {
+    fn from(opts: ServerSettingsOpts) -> Self {
+        Self {
+            server_id: opts.server_id,
+        }
+    }
 }
 
 impl TuiInterfaceServerSettings {
@@ -42,23 +55,29 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerSettings> {
     }
 
     fn get_key_bindings(&self) -> Vec<(&str, &str)> {
-        vec![("ESC", "Back")]
+        vec![("Esc", "Back")]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
         match key.code {
-            KeyCode::Char('q') => {
-                // Handle quitting the server settings interface
-                println!("Quitting server settings interface...");
-                // Implement logic to switch to another interface or exit
+            KeyCode::Char('q') | KeyCode::Esc => {
+                // Change back to server view interface.
+                let tui = ctx.tui.read().await;
+
+                match tui
+                    .change_interface(
+                        TuiInterfaceType::ServerView,
+                        Some(TuiInterfaceOpts::ServerView(ServerViewOpts::new(
+                            self.interface.server_id.clone(),
+                        ))),
+                    )
+                    .await
+                {
+                    Ok(_) => {}
+                    Err(e) => bail!("Failed to change interface to ServerView: {}", e),
+                }
             }
-            _ => {
-                // Handle other key events specific to the server settings interface
-                println!(
-                    "Unhandled key event in server settings interface: {:?}",
-                    key
-                );
-            }
+            _ => {}
         }
 
         Ok(())

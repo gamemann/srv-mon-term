@@ -10,6 +10,7 @@ pub struct Settings {
     pub query_all_in_bg: bool,
 
     pub tui_draw_interval: u64,
+    pub tui_input_poll_interval: u64,
 }
 
 impl Default for Settings {
@@ -17,6 +18,7 @@ impl Default for Settings {
         Settings {
             query_all_in_bg: true,
             tui_draw_interval: 1000,
+            tui_input_poll_interval: 100,
         }
     }
 }

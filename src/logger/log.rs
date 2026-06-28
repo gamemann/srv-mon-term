@@ -3,7 +3,10 @@ use tokio::fs;
 
 use anyhow::{Result, anyhow};
 
-use crate::logger::types::{Logger, level::LogLevel};
+use crate::logger::{
+    buffer::LogBufferData,
+    types::{Logger, level::LogLevel},
+};
 
 use tokio::io::AsyncWriteExt;
 
@@ -27,7 +30,10 @@ impl Logger {
                 buffer.pop_front();
             }
 
-            buffer.push_back(msg_base.clone());
+            // Push the new log message to the buffer.
+            let buff_data = LogBufferData::new(level.clone(), msg);
+
+            buffer.push_back(buff_data);
         }
 
         if let Some(path_fmt) = &self.path {

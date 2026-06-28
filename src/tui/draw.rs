@@ -38,12 +38,12 @@ impl Tui {
                     ])
                     .split(area);
 
-                // First, let's draw the header that include the top-level key mappings.
+                // First, let's draw the header that includes the top-level key mappings.
                 Tui::draw_header(frame, root[0], interface_type);
 
                 state.interface.draw(frame, root[1], ctx.clone());
 
-                // Draw the footer
+                // Draw the footer which is typically the key mappings for the current interface.
                 Tui::draw_footer(frame, root[2], &key_mappings);
             })
             .map_err(|e| anyhow!("Failed to draw terminal: {}", e))?;

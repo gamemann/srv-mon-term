@@ -40,7 +40,7 @@ impl StoreExt for StoreCtx<JsonStore> {
             .store_fmt
             .servers
             .iter()
-            .find(|s| s.id == Some(id.to_string()))
+            .find(|s| s.id == id.to_string())
             .cloned()
             .map_or_else(|| Ok(None), |server| Ok(Some(server)))
     }
@@ -75,12 +75,15 @@ impl StoreExt for StoreCtx<JsonStore> {
         store.get_json().await?;
 
         // Check if a server with the same ID or IP/port already exists to prevent duplicates.
-        if store.store_fmt.servers.iter().any(|s| {
-            (s.id.is_some() && s.id == server.id) || (s.ip == server.ip && s.port == server.port)
-        }) {
+        if store
+            .store_fmt
+            .servers
+            .iter()
+            .any(|s| s.id == server.id || (s.ip == server.ip && s.port == server.port))
+        {
             return Err(anyhow!(
                 "Server with ID {} or address {}:{} already exists",
-                server.id.as_deref().unwrap_or("unknown"),
+                server.id,
                 server.ip,
                 server.port
             ));
@@ -100,15 +103,15 @@ impl StoreExt for StoreCtx<JsonStore> {
         store.get_json().await?;
 
         // Update a server in the JSON store.
-        if let Some(existing) = store.store_fmt.servers.iter_mut().find(|s| {
-            (s.id.is_some() && s.id == server.id) || (s.ip == server.ip && s.port == server.port)
-        }) {
+        if let Some(existing) = store
+            .store_fmt
+            .servers
+            .iter_mut()
+            .find(|s| s.id == server.id || (s.ip == server.ip && s.port == server.port))
+        {
             *existing = server.clone();
         } else {
-            return Err(anyhow!(
-                "Server with ID {} not found for update",
-                server.id.as_deref().unwrap_or("unknown")
-            ));
+            return Err(anyhow!("Server with ID {} not found for update", server.id));
         }
 
         // Save the entire store after modification.
@@ -122,14 +125,17 @@ impl StoreExt for StoreCtx<JsonStore> {
         store.get_json().await?;
 
         // Delete a server by ID or IP/port from the JSON store.
-        if let Some(pos) = store.store_fmt.servers.iter().position(|s| {
-            (s.id.is_some() && s.id == server.id) || (s.ip == server.ip && s.port == server.port)
-        }) {
+        if let Some(pos) = store
+            .store_fmt
+            .servers
+            .iter()
+            .position(|s| s.id == server.id || (s.ip == server.ip && s.port == server.port))
+        {
             store.store_fmt.servers.remove(pos);
         } else {
             return Err(anyhow!(
                 "Server with ID {} not found for deletion",
-                server.id.as_deref().unwrap_or("unknown")
+                server.id
             ));
         }
 

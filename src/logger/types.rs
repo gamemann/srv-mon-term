@@ -1,12 +1,13 @@
+pub mod buffer;
 pub mod level;
 
 use std::{collections::VecDeque, sync::Arc};
 
 use tokio::sync::RwLock;
 
-use crate::logger::types::level::LogLevel;
+use crate::logger::{buffer::LogBufferData, types::level::LogLevel};
 
-pub type LogBuffer = Arc<RwLock<VecDeque<String>>>;
+pub type LogBuffer = Arc<RwLock<VecDeque<LogBufferData>>>;
 
 pub struct Logger {
     pub is_basic: bool,

@@ -14,6 +14,7 @@ impl Tui {
             (TuiInterfaceType::Dashboard, "F1", "Dashboard"),
             (TuiInterfaceType::Settings, "F2", "Settings"),
             (TuiInterfaceType::Logs, "F3", "Logs"),
+            (TuiInterfaceType::About, "F4", "About"),
         ];
 
         let mut spans = vec![Span::styled(

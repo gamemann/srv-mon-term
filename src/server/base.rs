@@ -1,10 +1,12 @@
 use anyhow::{Result, anyhow};
+use uuid::Uuid;
 
 use crate::server::types::Server;
 
 impl Server {
     pub fn new(ip: String, port: u16, port_query: Option<u16>) -> Self {
         Self {
+            id: Uuid::now_v7().to_string(), // Generate a new unique ID for the server.
             ip,
             port,
             port_query,
@@ -29,5 +31,9 @@ impl Server {
             .map_err(|_| anyhow!("Malformed address: invalid port"))?;
 
         Ok(Self::new(ip, port, None))
+    }
+
+    pub fn to_addr(&self) -> String {
+        format!("{}:{}", self.ip, self.port)
     }
 }
