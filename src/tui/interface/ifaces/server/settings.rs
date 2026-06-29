@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use ratatui::{
     Frame,
     crossterm::event::{KeyCode, KeyEvent},
@@ -7,9 +7,12 @@ use ratatui::{
 
 use crate::{
     context::Context,
-    tui::interface::{
-        context::TuiInterfaceContext, ext::TuiInterfaceExt, new::TuiInterfaceOpts,
-        server::view::ServerViewOpts, types::TuiInterfaceType,
+    tui::{
+        action::TuiAction,
+        interface::{
+            context::TuiInterfaceContext, ext::TuiInterfaceExt, new::TuiInterfaceOpts,
+            types::TuiInterfaceType,
+        },
     },
 };
 
@@ -54,33 +57,28 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerSettings> {
         Some(TuiInterfaceType::ServerView)
     }
 
+    async fn prepare(&mut self, ctx: Context) -> Result<()> {
+        Ok(())
+    }
+
+    async fn cleanup(&mut self, ctx: Context) -> Result<()> {
+        Ok(())
+    }
+
     fn get_key_bindings(&self) -> Vec<(&str, &str)> {
         vec![("Esc", "Back")]
     }
 
-    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
+    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => {
-                // Change back to server view interface.
-                let tui = ctx.tui.read().await;
-
-                match tui
-                    .change_interface(
-                        TuiInterfaceType::ServerView,
-                        Some(TuiInterfaceOpts::ServerView(ServerViewOpts::new(
-                            self.interface.server_id.clone(),
-                        ))),
-                    )
-                    .await
-                {
-                    Ok(_) => {}
-                    Err(e) => bail!("Failed to change interface to ServerView: {}", e),
-                }
-            }
-            _ => {}
+            KeyCode::Char('q') | KeyCode::Esc => Ok(TuiAction::ChangeInterface(
+                TuiInterfaceType::ServerSettings,
+                Some(TuiInterfaceOpts::ServerSettings(ServerSettingsOpts {
+                    server_id: self.interface.server_id.clone(),
+                })),
+            )),
+            _ => Ok(TuiAction::None),
         }
-
-        Ok(())
     }
 
     fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {}

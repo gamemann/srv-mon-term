@@ -8,11 +8,8 @@ use crate::{
     log_error, log_trace,
     logger::level::LogLevel,
     tui::{
-        interface::{
-            ext::TuiInterfaceExt,
-            new::TuiInterfaceOpts,
-            types::{TuiInterface, TuiInterfaceType},
-        },
+        action::TuiAction,
+        interface::{ext::TuiInterfaceExt, types::TuiInterfaceType},
         types::Tui,
     },
 };
@@ -210,29 +207,48 @@ impl Tui {
                                 _ => {}
                             }
 
-                            // Check our state and if we have an interface set, pass our input to it.
-                            {
+                            // Handle interface-specific events.
+                            let action = {
                                 let tui = ctx.tui.read().await;
                                 let mut state = tui.state.write().await;
 
-                                match state.interface.handle_input(key, ctx.clone()).await {
-                                    Ok(_) => {
-                                        log_trace!(
-                                            ctx.logger.write().await,
-                                            "Handled input event '{:?}' for interface: {}",
-                                            key,
-                                            state.interface.title()
-                                        );
-                                    }
-                                    Err(e) => {
-                                        log_error!(
-                                            ctx.logger.write().await,
-                                            "Failed to handle input event for interface '{}': {}",
-                                            state.interface.title(),
-                                            e
-                                        );
+                                state
+                                    .interface
+                                    .handle_input(key, ctx.clone())
+                                    .await
+                                    .unwrap_or(TuiAction::None)
+                            };
+
+                            // Handle the action returned by the interface.
+                            match action {
+                                TuiAction::ChangeInterface(interface_type, opts) => {
+                                    let tui = ctx.tui.read().await;
+
+                                    match tui.change_interface(interface_type, opts).await {
+                                        Ok(_) => {
+                                            log_trace!(
+                                                ctx.logger.write().await,
+                                                "Changed interface to {:?} due to interface action.",
+                                                interface_type
+                                            );
+                                        }
+                                        Err(e) => {
+                                            log_error!(
+                                                ctx.logger.write().await,
+                                                "Failed to change interface to {:?} due to interface action: {}",
+                                                interface_type,
+                                                e
+                                            );
+                                        }
                                     }
                                 }
+                                TuiAction::Exit => {
+                                    ctx.cancel_token.cancel();
+
+                                    break;
+                                }
+
+                                TuiAction::None => {}
                             }
                         }
                     }

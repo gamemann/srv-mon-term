@@ -5,13 +5,16 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
 };
 
 use crate::{
     context::Context,
     logger::{buffer::LogBufferData, level::LogLevel},
-    tui::interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
+    tui::{
+        action::TuiAction,
+        interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -42,11 +45,19 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
         None
     }
 
+    async fn prepare(&mut self, ctx: Context) -> Result<()> {
+        Ok(())
+    }
+
+    async fn cleanup(&mut self, ctx: Context) -> Result<()> {
+        Ok(())
+    }
+
     fn get_key_bindings(&self) -> Vec<(&str, &str)> {
         vec![("Esc", "Quit"), ("↑↓", "Scroll"), ("End", "Jump to latest")]
     }
 
-    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
+    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
                 ctx.cancel_token.cancel();
@@ -63,7 +74,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
             _ => {}
         }
 
-        Ok(())
+        Ok(TuiAction::None)
     }
 
     fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {
@@ -75,12 +86,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
             }
         };
 
-        let buffer = match logger.buffer.try_read() {
-            Ok(buffer) => buffer,
-            Err(_) => {
-                return;
-            }
-        };
+        let buffer = logger.buffer.read().unwrap();
 
         let height = area.height as usize;
 
@@ -91,11 +97,6 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
         // Clamp the scroll.
         let max_scroll = lines_tot.saturating_sub(height);
         let scroll_offset = self.interface.scroll_offset.min(max_scroll);
-
-        // Slice the visible window and make recent log appear at the bottom.
-        let visible_start = lines_tot.saturating_sub(height + scroll_offset);
-        let visible_end = lines_tot.saturating_sub(scroll_offset);
-        let visible_lines = lines[visible_start..visible_end].to_vec();
 
         // Draw the scroll indicator.
         let scroll_indicator = if scroll_offset > 0 {
@@ -115,7 +116,14 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let para = Paragraph::new(visible_lines).wrap(Wrap { trim: false });
+        // Use inner height — area.height includes the 2 border rows
+        let inner_height = inner.height as usize;
+        let max_scroll = lines_tot.saturating_sub(inner_height);
+        let scroll_offset = self.interface.scroll_offset.min(max_scroll);
+        let scroll_from_top = lines_tot.saturating_sub(inner_height + scroll_offset);
+
+        let para = Paragraph::new(lines).scroll((scroll_from_top as u16, 0));
+
         frame.render_widget(para, inner);
     }
 }

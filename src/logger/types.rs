@@ -1,9 +1,10 @@
 pub mod buffer;
 pub mod level;
 
-use std::{collections::VecDeque, sync::Arc};
-
-use tokio::sync::RwLock;
+use std::{
+    collections::VecDeque,
+    sync::{Arc, RwLock},
+};
 
 use crate::logger::{buffer::LogBufferData, types::level::LogLevel};
 

@@ -7,7 +7,10 @@ use ratatui::{
 
 use crate::{
     context::Context,
-    tui::interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
+    tui::{
+        action::TuiAction,
+        interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
+    },
 };
 
 #[derive(Default, Debug, Clone)]
@@ -30,19 +33,23 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
         None
     }
 
+    async fn prepare(&mut self, ctx: Context) -> Result<()> {
+        Ok(())
+    }
+
+    async fn cleanup(&mut self, ctx: Context) -> Result<()> {
+        Ok(())
+    }
+
     fn get_key_bindings(&self) -> Vec<(&str, &str)> {
         vec![("Esc", "Quit")]
     }
 
-    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
+    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
         match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => {
-                ctx.cancel_token.cancel();
-            }
-            _ => {}
+            KeyCode::Esc | KeyCode::Char('q') => Ok(TuiAction::Exit),
+            _ => Ok(TuiAction::None),
         }
-
-        Ok(())
     }
 
     fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {

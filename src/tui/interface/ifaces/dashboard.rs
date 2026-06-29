@@ -1,6 +1,6 @@
 pub mod server;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use ratatui::{
     Frame,
     crossterm::event::{KeyCode, KeyEvent},
@@ -11,15 +11,18 @@ use ratatui::{
 
 use crate::{
     context::Context,
-    log_debug, log_info,
+    log_debug,
     logger::level::LogLevel,
-    tui::interface::{
-        context::TuiInterfaceContext,
-        dashboard::server::{ROW_HEIGHT, draw_server_row},
-        ext::TuiInterfaceExt,
-        new::TuiInterfaceOpts,
-        server::view::ServerViewOpts,
-        types::TuiInterfaceType,
+    tui::{
+        action::TuiAction,
+        interface::{
+            context::TuiInterfaceContext,
+            ext::TuiInterfaceExt,
+            ifaces::dashboard::server::{ROW_HEIGHT, draw_server_row},
+            ifaces::server::view::ServerViewOpts,
+            new::TuiInterfaceOpts,
+            types::TuiInterfaceType,
+        },
     },
 };
 
@@ -51,16 +54,22 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
         None
     }
 
+    async fn prepare(&mut self, ctx: Context) -> Result<()> {
+        Ok(())
+    }
+
+    async fn cleanup(&mut self, ctx: Context) -> Result<()> {
+        Ok(())
+    }
+
     fn get_key_bindings(&self) -> Vec<(&str, &str)> {
         vec![("Esc", "Quit")]
     }
 
-    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<()> {
+    async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
         match key.code {
             // Handle exitting.
-            KeyCode::Esc | KeyCode::Char('q') => {
-                ctx.cancel_token.cancel();
-            }
+            KeyCode::Esc | KeyCode::Char('q') => return Ok(TuiAction::Exit),
 
             // Menu controls.
             KeyCode::Up | KeyCode::Char('k') => {
@@ -82,7 +91,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
                 // Attempt to read servers list.
                 let servers = match ctx.servers.try_read() {
                     Ok(guard) => guard,
-                    Err(_) => return Ok(()),
+                    Err(_) => return Ok(TuiAction::None),
                 };
 
                 // Retrieve the selected index, ensuring it is within bounds of the servers list.
@@ -97,7 +106,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
                 // Try to read the server context, if we can't, skip this server.
                 let srv_ctx = match servers.get(selected) {
                     Some(ctx) => ctx.clone(),
-                    None => return Ok(()),
+                    None => return Ok(TuiAction::None),
                 };
 
                 log_debug!(
@@ -107,32 +116,18 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
                 );
 
                 // Change to the server view interface.
-                let tui = ctx.tui.read().await;
-
-                match tui
-                    .change_interface(
-                        TuiInterfaceType::ServerView,
-                        Some(TuiInterfaceOpts::ServerView(ServerViewOpts::new(
-                            srv_ctx.id.clone(),
-                        ))),
-                    )
-                    .await
-                {
-                    Ok(_) => {
-                        log_info!(
-                            ctx.logger.write().await,
-                            "Switched to server view interface for server ID: '{}'",
-                            srv_ctx.id
-                        );
-                    }
-                    Err(e) => bail!("Failed to change interface to ServerView: {}", e),
-                }
+                return Ok(TuiAction::ChangeInterface(
+                    TuiInterfaceType::ServerView,
+                    Some(TuiInterfaceOpts::ServerView(ServerViewOpts {
+                        server_id: srv_ctx.id.clone(),
+                    })),
+                ));
             }
 
             _ => {}
         }
 
-        Ok(())
+        Ok(TuiAction::None)
     }
 
     fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {

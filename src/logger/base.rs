@@ -1,6 +1,9 @@
-use std::{collections::VecDeque, fs, path::Path, sync::Arc};
-
-use tokio::sync::RwLock;
+use std::{
+    collections::VecDeque,
+    fs,
+    path::Path,
+    sync::{Arc, RwLock},
+};
 
 use crate::logger::types::{Logger, level::LogLevel};
 
@@ -19,7 +22,7 @@ impl Logger {
             is_basic,
             levels,
             buffer: Arc::new(RwLock::new(VecDeque::new())),
-            max_buffer_size: Default::default(),
+            max_buffer_size: 100,
             path,
         }
     }

@@ -9,7 +9,9 @@ use ratatui::{
 
 use crate::{
     server::{Server, data::ServerStatus, types::latency::ServerLatency},
-    tui::interface::dashboard::server::{info::draw_server_info, latency::draw_server_latency},
+    tui::interface::ifaces::dashboard::server::{
+        info::draw_server_info, latency::draw_server_latency,
+    },
 };
 
 pub const ROW_HEIGHT: u16 = 4;

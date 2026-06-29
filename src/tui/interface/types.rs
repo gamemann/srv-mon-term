@@ -3,14 +3,17 @@ use ratatui::{Frame, layout::Rect};
 
 use crate::{
     context::Context,
-    tui::interface::{
-        about::TuiInterfaceAbout,
-        context::TuiInterfaceContext,
-        dashboard::TuiInterfaceDashboard,
-        ext::TuiInterfaceExt,
-        logs::TuiInterfaceLogs,
-        server::{settings::TuiInterfaceServerSettings, view::TuiInterfaceServerView},
-        settings::TuiInterfaceSettings,
+    tui::{
+        action::TuiAction,
+        interface::{
+            context::TuiInterfaceContext,
+            ext::TuiInterfaceExt,
+            ifaces::about::TuiInterfaceAbout,
+            ifaces::dashboard::TuiInterfaceDashboard,
+            ifaces::logs::TuiInterfaceLogs,
+            ifaces::server::{settings::TuiInterfaceServerSettings, view::TuiInterfaceServerView},
+            ifaces::settings::TuiInterfaceSettings,
+        },
     },
 };
 
@@ -80,6 +83,28 @@ impl TuiInterfaceExt for TuiInterface {
         }
     }
 
+    async fn prepare(&mut self, ctx: Context) -> Result<()> {
+        match self {
+            TuiInterface::Dashboard(ictx) => ictx.prepare(ctx).await,
+            TuiInterface::Logs(ictx) => ictx.prepare(ctx).await,
+            TuiInterface::Settings(ictx) => ictx.prepare(ctx).await,
+            TuiInterface::About(ictx) => ictx.prepare(ctx).await,
+            TuiInterface::ServerView(ictx) => ictx.prepare(ctx).await,
+            TuiInterface::ServerSettings(ictx) => ictx.prepare(ctx).await,
+        }
+    }
+
+    async fn cleanup(&mut self, ctx: Context) -> Result<()> {
+        match self {
+            TuiInterface::Dashboard(ictx) => ictx.cleanup(ctx).await,
+            TuiInterface::Logs(ictx) => ictx.cleanup(ctx).await,
+            TuiInterface::Settings(ictx) => ictx.cleanup(ctx).await,
+            TuiInterface::About(ictx) => ictx.cleanup(ctx).await,
+            TuiInterface::ServerView(ictx) => ictx.cleanup(ctx).await,
+            TuiInterface::ServerSettings(ictx) => ictx.cleanup(ctx).await,
+        }
+    }
+
     fn get_key_bindings(&self) -> Vec<(&str, &str)> {
         match self {
             TuiInterface::Dashboard(ctx) => ctx.get_key_bindings(),
@@ -95,7 +120,7 @@ impl TuiInterfaceExt for TuiInterface {
         &mut self,
         key: ratatui::crossterm::event::KeyEvent,
         ctx: Context,
-    ) -> Result<()> {
+    ) -> Result<TuiAction> {
         match self {
             TuiInterface::Dashboard(ictx) => ictx.handle_input(key, ctx).await,
             TuiInterface::Logs(ictx) => ictx.handle_input(key, ctx).await,

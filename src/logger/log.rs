@@ -23,7 +23,7 @@ impl Logger {
             println!("{}", msg_base.clone());
         } else {
             // Acquire write lock from buffer and push log message.
-            let mut buffer = self.buffer.write().await;
+            let mut buffer = self.buffer.write().unwrap();
 
             // Check if the buffer is full before pushing a new message. If it is, pop the oldest message to make room for the new one.
             if buffer.len() >= self.max_buffer_size {

@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 
 use crate::tui::interface::{
     context::TuiInterfaceContext,
-    server::{settings::ServerSettingsOpts, view::ServerViewOpts},
+    ifaces::server::{settings::ServerSettingsOpts, view::ServerViewOpts},
     types::{TuiInterface, TuiInterfaceType},
 };
 
