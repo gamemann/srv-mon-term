@@ -11,8 +11,6 @@ use anyhow::{Result, anyhow, bail};
 
 use crate::context::Context;
 
-use crate::store::ext::StoreExt;
-
 pub struct ServerCtx {
     pub id: String,
     pub server: RwLock<Server>,
@@ -22,13 +20,10 @@ pub struct ServerCtx {
 }
 
 impl ServerCtx {
-    pub fn new(ip: String, port: u16, port_query: Option<u16>) -> Self {
-        // Create the server first so we can get its ID for the ServerCtx.
-        let server = Server::new(ip, port, port_query);
-
+    pub fn new(id: Option<String>, ip: String, port: u16, port_query: Option<u16>) -> Self {
         Self {
-            id: server.id.clone(),
-            server: RwLock::new(server),
+            id: id.unwrap_or_else(|| Uuid::now_v7().to_string()),
+            server: RwLock::new(Server::new(ip, port, port_query)),
             tasks: RwLock::new(ServerTasks::default()),
             latency: RwLock::new(VecDeque::new()),
         }
@@ -58,12 +53,12 @@ impl ServerCtx {
         })
     }
 
-    pub async fn get_server_ctx(ctx: Context, server: &Server) -> Result<Arc<Self>> {
+    pub async fn get_server_ctx(ctx: Context, id: &str) -> Result<Arc<Self>> {
         let servers = ctx.servers.read().await;
 
         servers
             .iter()
-            .find(|s| s.id == server.id)
+            .find(|s| s.id == id)
             .cloned()
             .ok_or_else(|| anyhow!("Failed to find server context"))
     }
@@ -100,25 +95,12 @@ impl ServerCtx {
         Ok(srv_ctx.clone())
     }
 
-    pub async fn remove_from_ctx(ctx: Context, server: &ServerCtx) -> Result<()> {
-        let (my_id, my_ip, my_port) = {
-            let s = server.server.read().await;
-
-            (s.id.clone(), s.ip.clone(), s.port)
-        };
-
+    pub async fn remove_from_ctx(ctx: Context, id: &str) -> Result<()> {
         let my_server_idx = (|| async {
             let servers = ctx.servers.read().await;
 
             for (index, server) in servers.iter().enumerate() {
-                let s = server.server.read().await;
-
-                let id = s.id.clone();
-
-                let ip = s.ip.clone();
-                let port = s.port;
-
-                if id == my_id || (ip == my_ip && port == my_port) {
+                if id == server.id {
                     return Some(index);
                 }
             }
@@ -141,19 +123,17 @@ impl ServerCtx {
 
     pub async fn add(self: Arc<Self>, ctx: Context) -> Result<()> {
         {
-            let server = self.server.write().await;
+            let mut servers = ctx.servers.write().await;
 
-            // Attempt to add to store.
-            let mut store = ctx.store.write().await;
+            // Make sure the server doesn't already exist in the context.
+            if servers.iter().any(|s| s.id == self.id) {
+                return Err(anyhow!(
+                    "Server with ID {} already exists in context",
+                    self.id
+                ));
+            }
 
-            match store.srv_add(&server).await {
-                Ok(_) => (),
-                Err(e) => bail!(
-                    "Failed to add server to store ({}): {}",
-                    store.get_store_name(),
-                    e
-                ),
-            };
+            servers.push(self.clone());
         }
 
         Ok(())
@@ -161,19 +141,22 @@ impl ServerCtx {
 
     pub async fn delete(&mut self, ctx: Context) -> Result<()> {
         {
-            // Attempt to remove server from store.
-            let mut server = self.server.read().await;
+            let mut servers = ctx.servers.write().await;
 
-            let mut store = ctx.store.write().await;
+            // Make sure the server exists in the context.
+            if !servers.iter().any(|s| s.id == self.id) {
+                return Err(anyhow!(
+                    "Server with ID {} does not exist in context",
+                    self.id
+                ));
+            }
 
-            match store.srv_delete(&mut server).await {
-                Ok(_) => (),
-                Err(e) => bail!(
-                    "Failed to remove server from store ({}): {}",
-                    store.get_store_name(),
-                    e
-                ),
-            };
+            let my_server_idx = servers
+                .iter()
+                .position(|s| s.id == self.id)
+                .ok_or_else(|| anyhow!("Failed to find server in context"))?;
+
+            servers.remove(my_server_idx);
         }
 
         // Shut down and remove tasks for the server.
@@ -183,7 +166,7 @@ impl ServerCtx {
         }
 
         // Remove the server from the main context.
-        Self::remove_from_ctx(ctx.clone(), self)
+        Self::remove_from_ctx(ctx.clone(), &self.id)
             .await
             .map_err(|e| anyhow!("Failed to remove server from context: {}", e))?;
 

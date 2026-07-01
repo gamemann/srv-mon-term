@@ -1,3 +1,4 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TuiInterfaceContext<T> {
     pub interface: T,
 }

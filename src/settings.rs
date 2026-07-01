@@ -17,7 +17,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             query_all_in_bg: true,
-            tui_draw_interval: 1000,
+            tui_draw_interval: 200,
             tui_input_poll_interval: 100,
         }
     }

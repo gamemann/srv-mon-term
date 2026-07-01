@@ -1,6 +1,8 @@
 pub mod json;
 pub mod sqlite;
 
+pub mod server;
+
 use crate::store::{
     context::StoreCtx,
     types::{json::JsonStore, sqlite::SqliteStore},

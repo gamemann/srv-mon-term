@@ -19,7 +19,7 @@ pub fn draw_server_info(frame: &mut Frame<'_>, area: Rect, server: &Server, is_o
     };
 
     let display_name = server
-        .name
+        .display_name
         .clone()
         .or_else(|| data.srv_name.clone())
         .unwrap_or_else(|| format!("{}:{}", server.ip, server.port));

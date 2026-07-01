@@ -9,7 +9,7 @@ use ratatui::{
 use crate::tui::types::Tui;
 
 impl Tui {
-    pub fn draw_footer(frame: &mut Frame<'_>, area: Rect, bindings: &[(&str, &str)]) {
+    pub fn draw_footer(frame: &mut Frame<'_>, area: Rect, bindings: &[(String, String)]) {
         let mut spans: Vec<Span> = Vec::new();
 
         for (key, desc) in bindings {

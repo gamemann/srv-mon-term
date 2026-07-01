@@ -9,9 +9,9 @@ pub const TABLE_SETTINGS: &str = "CREATE TABLE IF NOT EXISTS settings (
 
 pub const TABLE_SERVER: &str = "CREATE TABLE IF NOT EXISTS servers (
     id TEXT PRIMARY KEY,
-    name TEXT,
     ip TEXT NOT NULL,
     port INTEGER NOT NULL,
+    display_name TEXT,
     port_query INTEGER,
     query_interval INTEGER DEFAULT 1000,
     query_timeout INTEGER DEFAULT 5000,

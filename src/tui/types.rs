@@ -4,6 +4,7 @@ use std::io::Stdout;
 
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 
 use crate::{context::ContextWeak, tui::types::state::TuiState};
 
@@ -13,5 +14,5 @@ pub struct Tui {
 
     pub term: Option<Terminal<CrosstermBackend<Stdout>>>,
 
-    pub draw_task_id: Option<u128>,
+    pub draw_cancel_token: CancellationToken,
 }

@@ -1,20 +1,16 @@
-use std::sync::Arc;
-
 use anyhow::{Result, bail};
 
 use crate::{
     context::Context,
-    log_info,
-    logger::level::LogLevel,
     query::Query,
-    server::{ServerCtx, types::query::ServerQueryType},
+    server::{Server, types::query::ServerQueryType},
     util::resolve_to_ipv4,
 };
 
-pub async fn check_server_cli(ctx: Context) -> Result<()> {
+pub async fn check_server_cli(ctx: Context) -> Result<Option<Server>> {
     let dst = match ctx.args.dst {
         Some(ref dst) => dst,
-        None => return Ok(()),
+        None => return Ok(None),
     };
 
     // Retrieve IP and port.
@@ -69,67 +65,8 @@ pub async fn check_server_cli(ctx: Context) -> Result<()> {
         },
     };
 
-    log_info!(
-        ctx.logger.write().await,
-        "Found server through CLI: {}:{}. Query type: {:?}. Attempting to find server context...",
-        ip,
-        port,
-        query_type
-    );
-
-    let add = ctx.args.add;
-    let delete = ctx.args.delete;
-
-    // Attempt to find the server context for the provided IP and port.
-    let srv_ctx = match ServerCtx::get_server_ctx_by_addr(ctx.clone(), &ip.to_string(), port).await
-    {
-        Ok(sctx) => {
-            // If we're in isolation mode, we need to setup the tasks.
-            if ctx.args.isolate {
-                sctx.clone().setup_tasks(ctx.clone()).await?;
-            }
-
-            sctx.clone()
-        }
-        Err(_) => {
-            if delete {
-                bail!(
-                    "Failed to find server context for {}:{}. Cannot delete server that doesn't exist.",
-                    ip,
-                    port
-                );
-            }
-
-            // If the server context doesn't exist and we're adding, create it.
-            let new_srv_ctx = ServerCtx::new(ip.to_string(), port, None);
-
-            if let Some(ref q) = query_type {
-                new_srv_ctx.server.write().await.query_type = q.clone();
-            }
-
-            let new_srv_ctx = Arc::new(new_srv_ctx);
-            {
-                let mut servers = ctx.servers.write().await;
-
-                servers.push(new_srv_ctx.clone());
-            }
-
-            // Add the server to the store if the flag is set.
-            if add {
-                let new_srv_ctx = new_srv_ctx.clone();
-
-                new_srv_ctx.add(ctx.clone()).await?;
-            }
-
-            // Setup tasks.
-            new_srv_ctx.clone().setup_tasks(ctx.clone()).await?;
-
-            new_srv_ctx
-        }
-    };
-
-    {
-        let mut server = srv_ctx.server.write().await;
+    let server = {
+        let mut server = Server::new(ip.to_string(), port, None);
 
         if let Some(ref q) = query_type {
             server.query_type = q.clone();
@@ -138,7 +75,9 @@ pub async fn check_server_cli(ctx: Context) -> Result<()> {
         if let Some(timeout) = ctx.args.timeout {
             server.query_timeout = timeout;
         }
-    }
 
-    Ok(())
+        server
+    };
+
+    Ok(Some(server))
 }

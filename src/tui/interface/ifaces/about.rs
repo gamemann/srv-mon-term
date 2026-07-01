@@ -21,7 +21,12 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Default, Debug, Clone)]
 pub struct TuiInterfaceAbout {}
 
+#[derive(Default, Debug, Clone)]
+pub struct TuiInterfaceAboutDrawData {}
+
 impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceAbout> {
+    type DrawData = TuiInterfaceAboutDrawData;
+
     fn title(&self) -> String {
         "About".to_string()
     }
@@ -46,8 +51,8 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceAbout> {
         Ok(())
     }
 
-    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
-        vec![("Esc", "Quit")]
+    fn get_key_bindings(&self) -> Vec<(String, String)> {
+        vec![("Esc".to_string(), "Quit".to_string())]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
@@ -57,7 +62,13 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceAbout> {
         }
     }
 
-    fn draw(&self, frame: &mut Frame<'_>, area: Rect, _ctx: Context) {
+    fn draw(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        _ctx: Context,
+        _draw_data: Option<&Self::DrawData>,
+    ) {
         let lines = vec![
             Line::from(vec![
                 Span::styled("Name: ", Style::default().fg(Color::DarkGray)),
@@ -86,5 +97,9 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceAbout> {
         ];
 
         frame.render_widget(Paragraph::new(lines), area);
+    }
+
+    async fn fetch_snapshot_data(&mut self, ctx: Context) -> Result<Option<Self::DrawData>> {
+        Ok(None)
     }
 }

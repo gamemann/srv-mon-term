@@ -3,11 +3,16 @@ use ratatui::{Frame, crossterm::event::KeyEvent, layout::Rect};
 
 use crate::{
     context::Context,
-    tui::{action::TuiAction, interface::types::TuiInterfaceType},
+    tui::{
+        action::TuiAction,
+        interface::types::{TuiInterfaceDrawData, TuiInterfaceType},
+    },
 };
 
 #[allow(async_fn_in_trait)]
 pub trait TuiInterfaceExt {
+    type DrawData;
+
     /// Retrieves the title of the interface (for the window).
     ///
     /// # Returns
@@ -54,7 +59,7 @@ pub trait TuiInterfaceExt {
     ///
     /// # Returns
     /// A vector of tuples, where each tuple contains a key (as a string) and its corresponding action description (as a string).
-    fn get_key_bindings(&self) -> Vec<(&str, &str)>;
+    fn get_key_bindings(&self) -> Vec<(String, String)>;
 
     /// Draws the interface on the provided frame and area (the body of the application).
     ///
@@ -62,7 +67,13 @@ pub trait TuiInterfaceExt {
     /// * `frame` - The frame to draw on.
     /// * `area` - The area of the frame to draw in (the body of the application).
     /// * `ctx` - The application context.
-    fn draw<'a>(&self, frame: &mut Frame<'a>, area: Rect, ctx: Context);
+    fn draw<'a>(
+        &self,
+        frame: &mut Frame<'a>,
+        area: Rect,
+        ctx: Context,
+        draw_data: Option<&Self::DrawData>,
+    );
 
     /// Handles user input for the interface, processing key events and performing corresponding actions.
     ///
@@ -72,4 +83,13 @@ pub trait TuiInterfaceExt {
     /// # Returns
     /// A `Result` containing a `TuiAction` indicating the action to be taken based on the input, or an error if the input handling fails.
     async fn handle_input(&mut self, ev: KeyEvent, ctx: Context) -> Result<TuiAction>;
+
+    /// Fetches any snapshot data for the interface.
+    ///
+    /// # Arguments
+    /// * `ctx` - The application context.
+    ///
+    /// # Returns
+    /// A `Result` containing an `Option` with the snapshot data for the interface, or an error if the fetch fails.
+    async fn fetch_snapshot_data(&mut self, ctx: Context) -> Result<Option<Self::DrawData>>;
 }

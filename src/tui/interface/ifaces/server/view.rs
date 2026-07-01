@@ -68,7 +68,12 @@ impl TuiInterfaceServerView {
     }
 }
 
+#[derive(Default, Debug, Clone)]
+pub struct TuiInterfaceServerViewDrawData {}
+
 impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
+    type DrawData = TuiInterfaceServerViewDrawData;
+
     fn title(&self) -> String {
         "Server View".to_string()
     }
@@ -93,8 +98,11 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
         Ok(())
     }
 
-    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
-        vec![("Esc", "Back"), ("e", "Edit")]
+    fn get_key_bindings(&self) -> Vec<(String, String)> {
+        vec![
+            ("Esc".to_string(), "Back".to_string()),
+            ("e".to_string(), "Edit".to_string()),
+        ]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
@@ -107,11 +115,21 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
         }
     }
 
-    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {
+    fn draw(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        ctx: Context,
+        draw_data: Option<&Self::DrawData>,
+    ) {
         // Retrieve server context.
         let srv_ctx = match self.interface.get_server_by_id(ctx.clone()) {
             Ok(srv_ctx) => srv_ctx,
             Err(_) => return,
         };
+    }
+
+    async fn fetch_snapshot_data(&mut self, ctx: Context) -> Result<Option<Self::DrawData>> {
+        Ok(None)
     }
 }

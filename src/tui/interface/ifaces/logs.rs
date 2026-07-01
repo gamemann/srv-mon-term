@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use anyhow::Result;
 use ratatui::{
     Frame,
@@ -28,7 +30,14 @@ impl Default for TuiInterfaceLogs {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct TuiInterfaceLogsDrawData {
+    pub buffer_snapshot: VecDeque<LogBufferData>,
+}
+
 impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
+    type DrawData = TuiInterfaceLogsDrawData;
+
     fn title(&self) -> String {
         "Logs".to_string()
     }
@@ -45,16 +54,20 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
         None
     }
 
-    async fn prepare(&mut self, ctx: Context) -> Result<()> {
+    async fn prepare(&mut self, _ctx: Context) -> Result<()> {
         Ok(())
     }
 
-    async fn cleanup(&mut self, ctx: Context) -> Result<()> {
+    async fn cleanup(&mut self, _ctx: Context) -> Result<()> {
         Ok(())
     }
 
-    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
-        vec![("Esc", "Quit"), ("↑↓", "Scroll"), ("End", "Jump to latest")]
+    fn get_key_bindings(&self) -> Vec<(String, String)> {
+        vec![
+            ("Esc".to_string(), "Quit".to_string()),
+            ("↑↓".to_string(), "Scroll".to_string()),
+            ("End".to_string(), "Jump to latest".to_string()),
+        ]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
@@ -77,16 +90,18 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
         Ok(TuiAction::None)
     }
 
-    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {
-        // Attempt to read the log buffer.
-        let logger = match ctx.logger.try_read() {
-            Ok(logger) => logger,
-            Err(_) => {
-                return;
-            }
+    fn draw(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        _ctx: Context,
+        draw_data: Option<&Self::DrawData>,
+    ) {
+        // Try to read the internal state's snapshot.
+        let buffer = match draw_data {
+            Some(data) => &data.buffer_snapshot,
+            None => return, // We don't have data yet, return;
         };
-
-        let buffer = logger.buffer.read().unwrap();
 
         let height = area.height as usize;
 
@@ -125,6 +140,26 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
         let para = Paragraph::new(lines).scroll((scroll_from_top as u16, 0));
 
         frame.render_widget(para, inner);
+    }
+
+    async fn fetch_snapshot_data(&mut self, ctx: Context) -> Result<Option<Self::DrawData>> {
+        // If we're scrolling, don't refresh.
+        if self.interface.scroll_offset > 0 {
+            return Ok(None);
+        }
+
+        let logger = ctx.logger.read().await;
+
+        let buffer = match logger.buffer.try_read() {
+            Ok(buffer) => buffer.clone(),
+            Err(_) => {
+                return Ok(None);
+            }
+        };
+
+        Ok(Some(TuiInterfaceLogsDrawData {
+            buffer_snapshot: buffer,
+        }))
     }
 }
 

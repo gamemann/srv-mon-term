@@ -1,8 +1,6 @@
-use crate::tui::interface::{
-    new::TuiInterfaceOpts,
-    types::{TuiInterface, TuiInterfaceType},
-};
+use crate::tui::interface::{base::TuiInterface, new::TuiInterfaceOpts, types::TuiInterfaceType};
 
+#[derive(Debug, Clone)]
 pub struct TuiState {
     pub interface: TuiInterface,
 }

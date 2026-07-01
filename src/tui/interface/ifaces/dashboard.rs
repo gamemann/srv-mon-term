@@ -1,5 +1,7 @@
 pub mod server;
 
+use std::collections::VecDeque;
+
 use anyhow::Result;
 use ratatui::{
     Frame,
@@ -13,13 +15,16 @@ use crate::{
     context::Context,
     log_debug,
     logger::level::LogLevel,
+    server::{Server, types::latency::ServerLatency},
     tui::{
         action::TuiAction,
         interface::{
             context::TuiInterfaceContext,
             ext::TuiInterfaceExt,
-            ifaces::dashboard::server::{ROW_HEIGHT, draw_server_row},
-            ifaces::server::view::ServerViewOpts,
+            ifaces::{
+                dashboard::server::{ROW_HEIGHT, draw_server_row},
+                server::view::ServerViewOpts,
+            },
             new::TuiInterfaceOpts,
             types::TuiInterfaceType,
         },
@@ -37,7 +42,21 @@ impl Default for TuiInterfaceDashboard {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ServerTableSnapshow {
+    pub id: String,
+    pub latency_history: VecDeque<ServerLatency>,
+    pub server: Server,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TuiInterfaceDashboardDrawData {
+    pub server_snapshots: Vec<ServerTableSnapshow>,
+}
+
 impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
+    type DrawData = TuiInterfaceDashboardDrawData;
+
     fn title(&self) -> String {
         "Dashboard".to_string()
     }
@@ -62,8 +81,8 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
         Ok(())
     }
 
-    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
-        vec![("Esc", "Quit")]
+    fn get_key_bindings(&self) -> Vec<(String, String)> {
+        vec![("Esc".to_string(), "Quit".to_string())]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
@@ -89,10 +108,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
                 );
 
                 // Attempt to read servers list.
-                let servers = match ctx.servers.try_read() {
-                    Ok(guard) => guard,
-                    Err(_) => return Ok(TuiAction::None),
-                };
+                let servers = ctx.servers.read().await;
 
                 // Retrieve the selected index, ensuring it is within bounds of the servers list.
                 let selected = self.interface.selected.min(servers.len().saturating_sub(1));
@@ -130,15 +146,21 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
         Ok(TuiAction::None)
     }
 
-    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {
-        // Attempt to read servers list.
-        let srv_guard = match ctx.servers.try_read() {
-            Ok(guard) => guard,
-            Err(_) => return,
+    fn draw(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        _ctx: Context,
+        draw_data: Option<&Self::DrawData>,
+    ) {
+        // Attempt to read server snapshots from draw data.
+        let servers = match draw_data {
+            Some(data) => &data.server_snapshots,
+            None => return,
         };
 
-        // Check if our servers list is empty, if so display a message to the user.
-        if srv_guard.is_empty() {
+        // Check if our server snapshots list is empty, if so display a message to the user.
+        if servers.is_empty() {
             let msg = Paragraph::new("No servers configured. Use the CLI to add servers.")
                 .style(Style::default().fg(Color::DarkGray))
                 .block(Block::default().borders(Borders::NONE));
@@ -148,14 +170,11 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
             return;
         }
 
-        // Retrieve the selected index, ensuring it is within bounds of the servers list.
-        let selected = self
-            .interface
-            .selected
-            .min(srv_guard.len().saturating_sub(1));
+        // Retrieve the selected index, ensuring it is within bounds of the server snapshots list.
+        let selected = self.interface.selected.min(servers.len().saturating_sub(1));
 
         // Create constraints and rows.
-        let constraints: Vec<Constraint> = srv_guard
+        let constraints: Vec<Constraint> = servers
             .iter()
             .map(|_| Constraint::Length(ROW_HEIGHT))
             .collect();
@@ -165,27 +184,46 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
             .constraints(constraints)
             .split(area);
 
-        for (i, srv_ctx) in srv_guard.iter().enumerate() {
+        for (i, srv_ss) in servers.iter().enumerate() {
             let is_selected = i == selected;
 
             // Try to read the server context, if we can't, skip this server.
-            let server = match srv_ctx.server.try_read() {
-                Ok(g) => g,
-                Err(_) => continue,
-            };
+            let server = &srv_ss.server;
 
-            // Retrieve latency history.
-            let latency_history = match srv_ctx.latency.try_read() {
-                Ok(g) => g,
-                Err(_) => continue,
-            };
+            let latency_history = srv_ss.latency_history.clone();
 
             if i >= rows.len() {
                 break;
             }
 
             // Draw the server row.
-            draw_server_row(frame, rows[i], &server, &latency_history, is_selected);
+            draw_server_row(frame, rows[i], server, &latency_history, is_selected);
         }
+    }
+
+    async fn fetch_snapshot_data(&mut self, ctx: Context) -> Result<Option<Self::DrawData>> {
+        // Retrieve server snapshots.
+        let snapshots = {
+            let servers = ctx.servers.read().await;
+
+            let mut snapshots = Vec::new();
+
+            for srv_ctx in servers.iter() {
+                let server = srv_ctx.server.read().await;
+                let latency_history = srv_ctx.latency.read().await;
+
+                snapshots.push(ServerTableSnapshow {
+                    id: srv_ctx.id.clone(),
+                    latency_history: latency_history.clone(),
+                    server: server.clone(),
+                });
+            }
+
+            snapshots
+        };
+
+        Ok(Some(Self::DrawData {
+            server_snapshots: snapshots,
+        }))
     }
 }

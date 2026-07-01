@@ -1,9 +1,8 @@
 use anyhow::{Result, anyhow};
 
 use crate::{
-    server::types::Server,
     settings::Settings,
-    store::{context::StoreCtx, ext::StoreExt, types::json::JsonStore},
+    store::{context::StoreCtx, ext::StoreExt, server::ServerStore, types::json::JsonStore},
 };
 
 impl StoreExt for StoreCtx<JsonStore> {
@@ -31,56 +30,37 @@ impl StoreExt for StoreCtx<JsonStore> {
         store.save_json().await
     }
 
-    async fn srv_fetch_by_id(&mut self, id: &str) -> Result<Option<Server>> {
-        // Do a quick read of the JSON store to ensure we have the latest data.
-        let mut store = self.store.lock().await;
-        store.get_json().await?;
+    async fn srv_fetch_by_id(&mut self, id: &str) -> Result<Option<ServerStore>> {
+        let store = self.store.lock().await;
 
-        store
-            .store_fmt
-            .servers
-            .iter()
-            .find(|s| s.id == id.to_string())
-            .cloned()
-            .map_or_else(|| Ok(None), |server| Ok(Some(server)))
+        Ok(store.store_fmt.servers.iter().find(|s| s.id == id).cloned())
     }
 
-    async fn srv_fetch_by_addr(&mut self, ip: &str, port: u16) -> Result<Option<Server>> {
-        // Do a quick read of the JSON store to ensure we have the latest data.
-        let mut store = self.store.lock().await;
-        store.get_json().await?;
+    async fn srv_fetch_by_addr(&mut self, ip: &str, port: u16) -> Result<Option<ServerStore>> {
+        let store = self.store.lock().await;
 
-        store
+        Ok(store
             .store_fmt
             .servers
             .iter()
             .find(|s| s.ip == ip && s.port == port)
-            .cloned()
-            .map_or_else(|| Ok(None), |server| Ok(Some(server)))
+            .cloned())
     }
 
-    async fn srv_fetch_all(&mut self) -> Result<Vec<Server>> {
-        // Do a quick read of the JSON store to ensure we have the latest data.
-        let mut store = self.store.lock().await;
-
-        store.get_json().await?;
+    async fn srv_fetch_all(&mut self) -> Result<Vec<ServerStore>> {
+        let store = self.store.lock().await;
 
         Ok(store.store_fmt.servers.clone())
     }
 
-    async fn srv_add(&mut self, server: &Server) -> Result<()> {
+    async fn srv_add(&mut self, server: &ServerStore) -> Result<()> {
         // Fetch current settings from the JSON store.
         let mut store = self.store.lock().await;
 
         store.get_json().await?;
 
         // Check if a server with the same ID or IP/port already exists to prevent duplicates.
-        if store
-            .store_fmt
-            .servers
-            .iter()
-            .any(|s| s.id == server.id || (s.ip == server.ip && s.port == server.port))
-        {
+        if store.store_fmt.servers.iter().any(|s| s.id == server.id) {
             return Err(anyhow!(
                 "Server with ID {} or address {}:{} already exists",
                 server.id,
@@ -96,7 +76,7 @@ impl StoreExt for StoreCtx<JsonStore> {
         store.save_json().await
     }
 
-    async fn srv_update(&mut self, server: &Server) -> Result<()> {
+    async fn srv_update(&mut self, server: &ServerStore) -> Result<()> {
         // Fetch current settings from the JSON store.
         let mut store = self.store.lock().await;
 
@@ -118,7 +98,7 @@ impl StoreExt for StoreCtx<JsonStore> {
         store.save_json().await
     }
 
-    async fn srv_delete(&mut self, server: &Server) -> Result<()> {
+    async fn srv_delete(&mut self, server: &ServerStore) -> Result<()> {
         // Fetch current settings from the JSON store.
         let mut store = self.store.lock().await;
 

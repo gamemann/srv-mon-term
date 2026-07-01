@@ -2,8 +2,7 @@ use anyhow::{Result, anyhow};
 use ratatui::layout::{Constraint, Direction, Layout};
 
 use crate::tui::types::Tui;
-
-use crate::tui::interface::ext::TuiInterfaceExt;
+use crate::{log_info, logger::level::LogLevel, tui::interface::ext::TuiInterfaceExt};
 
 impl Tui {
     pub async fn draw(&mut self) -> Result<()> {
@@ -16,12 +15,18 @@ impl Tui {
                 .as_mut()
                 .ok_or_else(|| anyhow!("Terminal not initialized"))?;
 
-            // Retrieve state so we can draw the current interface frame.
-            let state = self.state.read().await;
+            // We need to attempt to fetch draw data, type, and key bindings.
+            // We clone the state here since we don't intend on editing it and we don't want to hold the lock while drawing.
+            let (draw_data, int_type, key_mappings, state_clone) = {
+                let mut state = self.state.write().await;
 
-            // Retrieve interface type and key mappings for header and footer layouts.
-            let interface_type = state.interface.get_type();
-            let key_mappings = state.interface.get_key_bindings();
+                let draw_data = state.interface.fetch_snapshot_data(ctx.clone()).await?;
+
+                let int_type = state.interface.get_type().clone();
+                let key_mappings = state.interface.get_key_bindings().clone();
+
+                (draw_data, int_type, key_mappings, state.clone())
+            };
 
             // Draw the current interface.
             term.draw(|frame| {
@@ -39,9 +44,11 @@ impl Tui {
                     .split(area);
 
                 // First, let's draw the header that includes the top-level key mappings.
-                Tui::draw_header(frame, root[0], interface_type);
+                Tui::draw_header(frame, root[0], int_type);
 
-                state.interface.draw(frame, root[1], ctx.clone());
+                state_clone
+                    .interface
+                    .draw(frame, root[1], ctx.clone(), draw_data.as_ref());
 
                 // Draw the footer which is typically the key mappings for the current interface.
                 Tui::draw_footer(frame, root[2], &key_mappings);

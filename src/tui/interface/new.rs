@@ -1,9 +1,10 @@
 use anyhow::{Result, anyhow};
 
 use crate::tui::interface::{
+    base::TuiInterface,
     context::TuiInterfaceContext,
     ifaces::server::{settings::ServerSettingsOpts, view::ServerViewOpts},
-    types::{TuiInterface, TuiInterfaceType},
+    types::TuiInterfaceType,
 };
 
 #[derive(Debug, Clone)]
@@ -21,6 +22,7 @@ impl TuiInterface {
             TuiInterfaceType::Dashboard => Ok(Self::Dashboard(TuiInterfaceContext::new())),
             TuiInterfaceType::Logs => Ok(Self::Logs(TuiInterfaceContext::new())),
             TuiInterfaceType::Settings => Ok(Self::Settings(TuiInterfaceContext::new())),
+            TuiInterfaceType::ServerNew => Ok(Self::ServerNew(TuiInterfaceContext::new())),
             TuiInterfaceType::About => Ok(Self::About(TuiInterfaceContext::new())),
 
             TuiInterfaceType::ServerView => {

@@ -15,11 +15,11 @@ const DEFAULT_LATENCY_HISTORY_SIZE: usize = 100;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Server {
-    pub id: String,
-    pub name: Option<String>,
-
     pub ip: String,
     pub port: u16,
+
+    pub display_name: Option<String>,
+
     pub port_query: Option<u16>,
 
     pub query_interval: u64,
@@ -38,11 +38,11 @@ pub struct Server {
 impl Default for Server {
     fn default() -> Self {
         Self {
-            id: String::new(),
-            name: None,
-
             ip: String::new(),
             port: 0,
+
+            display_name: None,
+
             port_query: None,
 
             query_interval: 1000,

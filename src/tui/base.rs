@@ -3,6 +3,7 @@ use std::{io::Stdout, sync::Arc};
 use anyhow::{Result, anyhow};
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     context::Context,
@@ -14,7 +15,7 @@ impl Tui {
         Tui {
             ctx: None,
             term: None,
-            draw_task_id: None,
+            draw_cancel_token: CancellationToken::new(),
 
             state: RwLock::new(TuiState::default()),
         }

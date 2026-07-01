@@ -4,10 +4,7 @@ use crate::{
     log_debug,
     logger::level::LogLevel,
     tui::{
-        interface::{
-            new::TuiInterfaceOpts,
-            types::{TuiInterface, TuiInterfaceType},
-        },
+        interface::{base::TuiInterface, new::TuiInterfaceOpts, types::TuiInterfaceType},
         types::Tui,
     },
 };

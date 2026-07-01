@@ -102,24 +102,6 @@ async fn main() {
         }
     }
 
-    // Check for CLI server override.
-    log_info!(logger.write().await, "Checking for server CLI overrides...");
-
-    match check_server_cli(ctx.clone()).await {
-        Ok(_) => {
-            log_info!(logger.write().await, "Checked for server CLI overrides...");
-        }
-        Err(e) => {
-            log_fatal!(
-                logger.write().await,
-                "Failed to check for server CLI overrides: {}",
-                e
-            );
-
-            process::exit(1);
-        }
-    }
-
     log_debug!(logger.write().await, "Attempting to set up scheduler...");
 
     // Start the scheduler.
@@ -162,21 +144,16 @@ async fn main() {
         // Now start the TUI.
         log_info!(logger.write().await, "Starting TUI...");
 
-        let task_id = match Tui::start(ctx.clone()).await {
-            Ok(task_id) => {
+        match Tui::start(ctx.clone()).await {
+            Ok(_) => {
                 log_info!(logger.write().await, "Started TUI...");
-
-                task_id
             }
             Err(e) => {
                 log_fatal!(logger.write().await, "Failed to start TUI: {}", e);
 
                 process::exit(1);
             }
-        };
-
-        // Assign the draw task ID.
-        tui.draw_task_id = Some(task_id);
+        }
     }
 
     loop {

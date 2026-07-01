@@ -16,7 +16,12 @@ use crate::{
 #[derive(Default, Debug, Clone)]
 pub struct TuiInterfaceSettings {}
 
+#[derive(Default, Debug, Clone)]
+pub struct TuiInterfaceSettingsDrawData {}
+
 impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
+    type DrawData = TuiInterfaceSettingsDrawData;
+
     fn title(&self) -> String {
         "Settings".to_string()
     }
@@ -41,8 +46,8 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
         Ok(())
     }
 
-    fn get_key_bindings(&self) -> Vec<(&str, &str)> {
-        vec![("Esc", "Quit")]
+    fn get_key_bindings(&self) -> Vec<(String, String)> {
+        vec![("Esc".to_string(), "Quit".to_string())]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
@@ -52,7 +57,17 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceSettings> {
         }
     }
 
-    fn draw(&self, frame: &mut Frame<'_>, area: Rect, ctx: Context) {
+    fn draw(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        ctx: Context,
+        _draw_data: Option<&Self::DrawData>,
+    ) {
         // Implement the logic to draw the settings interface
+    }
+
+    async fn fetch_snapshot_data(&mut self, ctx: Context) -> Result<Option<Self::DrawData>> {
+        Ok(None)
     }
 }

@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use anyhow::{Result, anyhow, bail};
-use rusqlite::params;
+use rusqlite::named_params;
 
 use crate::{
-    server::types::Server,
     settings::Settings,
     store::{
         context::StoreCtx,
         ext::StoreExt,
+        server::ServerStore,
         sqlite::queries::{
             SQL_SETTINGS_FETCH, SQL_SETTINGS_SAVE, SQL_SRV_DELETE, SQL_SRV_FETCH_ALL,
             SQL_SRV_FETCH_BY_ADDR, SQL_SRV_FETCH_BY_ID, SQL_SRV_INSERT, SQL_SRV_UPDATE,
@@ -91,7 +91,7 @@ impl StoreExt for StoreCtx<SqliteStore> {
         }
     }
 
-    async fn srv_fetch_by_id(&mut self, id: &str) -> Result<Option<Server>> {
+    async fn srv_fetch_by_id(&mut self, id: &str) -> Result<Option<ServerStore>> {
         let store = self.store.lock().await;
 
         if let Some(conn) = &store.conn {
@@ -108,47 +108,47 @@ impl StoreExt for StoreCtx<SqliteStore> {
                 .map_err(|e| anyhow!("Failed to fetch row: {}", e))?
             {
                 // Convert the row into a Server struct.
-                let server = Server {
+                let server = ServerStore {
                     id: id.to_string(),
-                    name: row
-                        .get(0)
-                        .map_err(|e| anyhow!("Failed to get name from row: {}", e))?,
                     ip: row
                         .get(1)
                         .map_err(|e| anyhow!("Failed to get ip from row: {}", e))?,
                     port: row
                         .get(2)
                         .map_err(|e| anyhow!("Failed to get port from row: {}", e))?,
-                    port_query: row
+                    display_name: row
                         .get(3)
+                        .map_err(|e| anyhow!("Failed to get display_name from row: {}", e))?,
+                    port_query: row
+                        .get(4)
                         .map_err(|e| anyhow!("Failed to get port_query from row: {}", e))?,
                     query_interval: row
-                        .get::<_, i64>(4)
+                        .get::<_, i64>(5)
                         .map_err(|e| anyhow!("Failed to get query_interval from row: {}", e))?
                         as u64,
                     query_timeout: row
-                        .get::<_, i64>(5)
+                        .get::<_, i64>(6)
                         .map_err(|e| anyhow!("Failed to get query_timeout from row: {}", e))?
                         as u64,
                     query_type: row
-                        .get::<_, i32>(6)
+                        .get::<_, i32>(7)
                         .map_err(|e| anyhow!("Failed to get query_type from row: {}", e))?
                         .try_into()
                         .map_err(|e| anyhow!("Failed to convert query_type from row: {}", e))?,
                     latency_interval: row
-                        .get::<_, Option<i64>>(6)
+                        .get::<_, Option<i64>>(8)
                         .map_err(|e| anyhow!("Failed to get latency_interval from row: {}", e))?
                         .map(|v| v as u64),
                     latency_timeout: row
-                        .get::<_, Option<i64>>(7)
+                        .get::<_, Option<i64>>(9)
                         .map_err(|e| anyhow!("Failed to get latency_timeout from row: {}", e))?
                         .map(|v| v as u64),
                     latency_type: row
-                        .get::<_, i32>(8)
+                        .get::<_, i32>(10)
                         .map_err(|e| anyhow!("Failed to get latency_type from row: {}", e))?
                         .try_into()
                         .map_err(|e| anyhow!("Failed to convert latency_type from row: {}", e))?,
-                    latency_history_size: row.get::<_, u32>(9).map_err(|e| {
+                    latency_history_size: row.get::<_, u32>(11).map_err(|e| {
                         anyhow!("Failed to get latency_history_size from row: {}", e)
                     })? as usize,
 
@@ -164,7 +164,7 @@ impl StoreExt for StoreCtx<SqliteStore> {
         }
     }
 
-    async fn srv_fetch_by_addr(&mut self, ip: &str, port: u16) -> Result<Option<Server>> {
+    async fn srv_fetch_by_addr(&mut self, ip: &str, port: u16) -> Result<Option<ServerStore>> {
         let store = self.store.lock().await;
 
         if let Some(conn) = &store.conn {
@@ -181,15 +181,15 @@ impl StoreExt for StoreCtx<SqliteStore> {
                 .map_err(|e| anyhow!("Failed to fetch row: {}", e))?
             {
                 // Convert the row into a Server struct.
-                let server = Server {
+                let server = ServerStore {
                     id: row
                         .get(0)
                         .map_err(|e| anyhow!("Failed to get id from row: {}", e))?,
-                    name: row
-                        .get(1)
-                        .map_err(|e| anyhow!("Failed to get name from row: {}", e))?,
                     ip: ip.to_string(),
                     port,
+                    display_name: row
+                        .get(1)
+                        .map_err(|e| anyhow!("Failed to get display_name from row: {}", e))?,
                     port_query: row
                         .get(2)
                         .map_err(|e| anyhow!("Failed to get port_query from row: {}", e))?,
@@ -235,7 +235,7 @@ impl StoreExt for StoreCtx<SqliteStore> {
         }
     }
 
-    async fn srv_fetch_all(&mut self) -> Result<Vec<Server>> {
+    async fn srv_fetch_all(&mut self) -> Result<Vec<ServerStore>> {
         let store = self.store.lock().await;
 
         if let Some(conn) = &store.conn {
@@ -253,20 +253,20 @@ impl StoreExt for StoreCtx<SqliteStore> {
                 .next()
                 .map_err(|e| anyhow!("Failed to fetch row: {}", e))?
             {
-                // Convert the row into a Server struct.
-                let server = Server {
+                // Convert the row into a ServerStore struct.
+                let server = ServerStore {
                     id: row
                         .get(0)
                         .map_err(|e| anyhow!("Failed to get id from row: {}", e))?,
-                    name: row
-                        .get(1)
-                        .map_err(|e| anyhow!("Failed to get name from row: {}", e))?,
                     ip: row
-                        .get(2)
+                        .get(1)
                         .map_err(|e| anyhow!("Failed to get ip from row: {}", e))?,
                     port: row
-                        .get(3)
+                        .get(2)
                         .map_err(|e| anyhow!("Failed to get port from row: {}", e))?,
+                    display_name: row
+                        .get(3)
+                        .map_err(|e| anyhow!("Failed to get display_name from row: {}", e))?,
                     port_query: row
                         .get(4)
                         .map_err(|e| anyhow!("Failed to get port_query from row: {}", e))?,
@@ -312,26 +312,26 @@ impl StoreExt for StoreCtx<SqliteStore> {
         }
     }
 
-    async fn srv_add(&mut self, server: &Server) -> Result<()> {
+    async fn srv_add(&mut self, server: &ServerStore) -> Result<()> {
         let store = self.store.lock().await;
 
         // Add a server to the SQLite store.
         if let Some(conn) = &store.conn {
             conn.execute(
                 SQL_SRV_INSERT,
-                params![
-                    server.id,
-                    server.name,
-                    server.ip,
-                    server.port,
-                    server.port_query,
-                    server.query_interval as i64,
-                    server.query_timeout as i64,
-                    server.query_type.clone() as i32,
-                    server.latency_interval.map(|v| v as i64),
-                    server.latency_timeout.map(|v| v as i64),
-                    server.latency_type.clone() as i32,
-                    server.latency_history_size as i64,
+                named_params![
+                    ":id": server.id,
+                    ":ip": server.ip,
+                    ":port": server.port,
+                    ":display_name": server.display_name,
+                    ":port_query": server.port_query,
+                    ":query_interval": server.query_interval as i64,
+                    ":query_timeout": server.query_timeout as i64,
+                    ":query_type": server.query_type.clone() as i32,
+                    ":latency_interval": server.latency_interval.map(|v| v as i64),
+                    ":latency_timeout": server.latency_timeout.map(|v| v as i64),
+                    ":latency_type": server.latency_type.clone() as i32,
+                    ":latency_history_size": server.latency_history_size as i64,
                 ],
             )
             .map_err(|e| anyhow!("Failed to execute statement: {}", e))?;
@@ -342,25 +342,26 @@ impl StoreExt for StoreCtx<SqliteStore> {
         }
     }
 
-    async fn srv_update(&mut self, server: &Server) -> Result<()> {
+    async fn srv_update(&mut self, server: &ServerStore) -> Result<()> {
         // Update a server in the SQLite store.
         let store = self.store.lock().await;
 
         if let Some(conn) = &store.conn {
             conn.execute(
                 SQL_SRV_UPDATE,
-                params![
-                    server.name,
-                    server.ip,
-                    server.port,
-                    server.port_query,
-                    server.query_interval as i64,
-                    server.query_timeout as i64,
-                    server.latency_interval.map(|v| v as i64),
-                    server.latency_timeout.map(|v| v as i64),
-                    server.latency_type.clone() as i32,
-                    server.latency_history_size as i64,
-                    server.id,
+                named_params![
+                    ":ip": server.ip,
+                    ":port": server.port,
+                    ":display_name": server.display_name,
+                    ":port_query": server.port_query,
+                    ":query_interval": server.query_interval as i64,
+                    ":query_timeout": server.query_timeout as i64,
+                    ":query_type": server.query_type.clone() as i32,
+                    ":latency_interval": server.latency_interval.map(|v| v as i64),
+                    ":latency_timeout": server.latency_timeout.map(|v| v as i64),
+                    ":latency_type": server.latency_type.clone() as i32,
+                    ":latency_history_size": server.latency_history_size as i64,
+                    ":id": server.id,
                 ],
             )
             .map_err(|e| anyhow!("Failed to execute statement: {}", e))?;
@@ -371,12 +372,19 @@ impl StoreExt for StoreCtx<SqliteStore> {
         }
     }
 
-    async fn srv_delete(&mut self, server: &Server) -> Result<()> {
+    async fn srv_delete(&mut self, server: &ServerStore) -> Result<()> {
         let store = self.store.lock().await;
 
         if let Some(conn) = &store.conn {
-            conn.execute(SQL_SRV_DELETE, params![server.id, server.ip, server.port,])
-                .map_err(|e| anyhow!("Failed to execute statement: {}", e))?;
+            conn.execute(
+                SQL_SRV_DELETE,
+                named_params![
+                    ":id": server.id,
+                    ":ip": server.ip,
+                    ":port": server.port,
+                ],
+            )
+            .map_err(|e| anyhow!("Failed to execute statement: {}", e))?;
 
             Ok(())
         } else {
