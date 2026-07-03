@@ -315,6 +315,11 @@ impl StoreExt for StoreCtx<SqliteStore> {
     async fn srv_add(&mut self, server: &ServerStore) -> Result<()> {
         let store = self.store.lock().await;
 
+        // If the ID is empty, return an error. The ID is required for inserting a server into the database.
+        if server.id.is_empty() {
+            bail!("Server ID is empty. Cannot add server to the database.");
+        }
+
         // Add a server to the SQLite store.
         if let Some(conn) = &store.conn {
             conn.execute(

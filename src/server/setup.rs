@@ -4,17 +4,15 @@ use anyhow::{Result, anyhow, bail};
 
 use crate::context::Context;
 
-use crate::log_trace;
 use crate::server::check_server_cli;
 use crate::server::context::ServerCtx;
 use crate::store::ext::StoreExt;
 use crate::store::server::ServerStore;
 use crate::{log_info, logger::level::LogLevel};
+use crate::{log_trace, log_warn};
 
 pub async fn servers_setup_all(ctx: Context) -> Result<()> {
     let args = ctx.args.clone();
-
-    // We need to modify the servers
 
     let mut servers_store = if !args.isolate {
         let mut store = ctx.store.write().await;
@@ -85,19 +83,21 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
             is_deleted
         };
 
-        if let Some(existing_server) = existing_server {
-            // Update the existing server with CLI values.
-            existing_server.query_type = s.query_type.clone();
-            existing_server.query_timeout = s.query_timeout;
-        } else if !is_deleted {
-            // If it doesn't exist, add it to the list.
-            servers_store.push(ServerStore {
-                ip: s.ip.clone(),
-                port: s.port,
-                query_type: s.query_type.clone(),
-                query_timeout: s.query_timeout,
-                ..Default::default()
-            });
+        if !is_deleted {
+            if let Some(existing_server) = existing_server {
+                // Update the existing server with CLI values.
+                existing_server.query_type = s.query_type.clone();
+                existing_server.query_timeout = s.query_timeout;
+            } else {
+                // If it doesn't exist, add it to the list.
+                servers_store.push(ServerStore {
+                    ip: s.ip.clone(),
+                    port: s.port,
+                    query_type: s.query_type.clone(),
+                    query_timeout: s.query_timeout,
+                    ..Default::default()
+                });
+            }
         }
     }
 
@@ -124,39 +124,50 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
             addr
         );
 
+        let id = if server.id.trim().len() > 0 {
+            Some(server.id.clone())
+        } else {
+            None
+        };
+
         let new_ctx = Arc::new(ServerCtx::new(
-            Some(server.id.clone()),
+            id,
             server.ip.clone(),
             server.port,
             server.port_query,
         ));
 
+        log_trace!(
+            ctx.logger.write().await,
+            "Successfully created server context for {}",
+            addr
+        );
+
         match ServerCtx::add(new_ctx.clone(), ctx.clone()).await {
             Ok(_) => {
-                let new_ctx = new_ctx.clone();
-
                 log_trace!(
                     ctx.logger.write().await,
-                    "Successfully set up server context for {}.",
-                    addr
-                );
-
-                // Spawn tasks for the server.
-                new_ctx
-                    .setup_tasks(ctx.clone())
-                    .await
-                    .map_err(|e| anyhow!("Failed to setup tasks for server '{}': {}", addr, e))?;
-
-                log_info!(
-                    ctx.logger.write().await,
-                    "Successfully set up server context and tasks for {}.",
+                    "Successfully added server context to main vector {}.",
                     addr
                 );
             }
             Err(e) => {
-                bail!("Failed to retrieve server context for '{}': {}", addr, e);
+                log_warn!(
+                    ctx.logger.write().await,
+                    "Failed to add server context for {}: {}",
+                    addr,
+                    e
+                );
             }
         }
+
+        let id_now = new_ctx.id.clone();
+
+        // Spawn tasks for the server.
+        new_ctx
+            .setup_tasks(ctx.clone())
+            .await
+            .map_err(|e| anyhow!("Failed to setup tasks for server '{}': {}", addr, e))?;
 
         if args.add
             && let Some(ref s) = srv_cli
@@ -166,7 +177,12 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
 
                 let mut store = ctx.store.write().await;
 
-                store.srv_add(&server).await.map_err(|e| {
+                let updated_server = ServerStore {
+                    id: id_now,
+                    ..server
+                };
+
+                store.srv_add(&updated_server).await.map_err(|e| {
                     anyhow!("Failed to add server {}:{} to store: {}", s.ip, s.port, e)
                 })?;
 
@@ -178,9 +194,6 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                 );
             }
         }
-
-        // Add the server context to the main context's servers vector.
-        ctx.servers.write().await.push(new_ctx);
     }
 
     Ok(())

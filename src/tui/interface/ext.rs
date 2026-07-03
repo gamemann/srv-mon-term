@@ -3,10 +3,7 @@ use ratatui::{Frame, crossterm::event::KeyEvent, layout::Rect};
 
 use crate::{
     context::Context,
-    tui::{
-        action::TuiAction,
-        interface::types::{TuiInterfaceDrawData, TuiInterfaceType},
-    },
+    tui::{action::TuiAction, interface::types::TuiInterfaceType},
 };
 
 #[allow(async_fn_in_trait)]

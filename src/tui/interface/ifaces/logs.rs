@@ -1,4 +1,7 @@
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use anyhow::Result;
 use ratatui::{
@@ -19,14 +22,35 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TuiInterfaceLogs {
     pub scroll_offset: usize,
+
+    content_len: AtomicUsize,
+    viewport_height: AtomicUsize,
+
+    previous_buffer: VecDeque<LogBufferData>,
+}
+
+impl Clone for TuiInterfaceLogs {
+    fn clone(&self) -> Self {
+        Self {
+            scroll_offset: self.scroll_offset,
+            content_len: AtomicUsize::new(self.content_len.load(Ordering::Relaxed)),
+            viewport_height: AtomicUsize::new(self.viewport_height.load(Ordering::Relaxed)),
+            previous_buffer: self.previous_buffer.clone(),
+        }
+    }
 }
 
 impl Default for TuiInterfaceLogs {
     fn default() -> Self {
-        Self { scroll_offset: 0 }
+        Self {
+            scroll_offset: 0,
+            content_len: AtomicUsize::new(0),
+            viewport_height: AtomicUsize::new(0),
+            previous_buffer: VecDeque::new(),
+        }
     }
 }
 
@@ -71,12 +95,18 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
+        let max_scroll = self
+            .interface
+            .content_len
+            .load(Ordering::Relaxed)
+            .saturating_sub(self.interface.viewport_height.load(Ordering::Relaxed));
+
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
                 ctx.cancel_token.cancel();
             }
             KeyCode::Up | KeyCode::Char('k') => {
-                self.interface.scroll_offset += 1;
+                self.interface.scroll_offset = (self.interface.scroll_offset + 1).min(max_scroll);
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.interface.scroll_offset = self.interface.scroll_offset.saturating_sub(1);
@@ -103,15 +133,27 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
             None => return, // We don't have data yet, return;
         };
 
-        let height = area.height as usize;
-
         let lines: Vec<Line> = buffer.iter().map(|en| parse_log_data(en.clone())).collect();
-
         let lines_tot = lines.len();
 
+        // Create temp block to get inner height (without borders)
+        let block = Block::default().borders(Borders::ALL);
+        let inner = block.inner(area);
+
+        let inner_height = inner.height as usize;
+
+        // Cache the content length and viewport height for scroll calculations.
+        self.interface
+            .content_len
+            .store(lines_tot, Ordering::Relaxed);
+        self.interface
+            .viewport_height
+            .store(inner_height, Ordering::Relaxed);
+
         // Clamp the scroll.
-        let max_scroll = lines_tot.saturating_sub(height);
+        let max_scroll = lines_tot.saturating_sub(inner_height);
         let scroll_offset = self.interface.scroll_offset.min(max_scroll);
+        let scroll_from_top = lines_tot.saturating_sub(inner_height + scroll_offset);
 
         // Draw the scroll indicator.
         let scroll_indicator = if scroll_offset > 0 {
@@ -120,32 +162,24 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
             String::new()
         };
 
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
-            .title(Span::styled(
-                scroll_indicator,
-                Style::default().fg(Color::Yellow),
-            ));
+        let block = block.title(Span::styled(
+            scroll_indicator,
+            Style::default().fg(Color::Yellow),
+        ));
 
-        let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        // Use inner height — area.height includes the 2 border rows
-        let inner_height = inner.height as usize;
-        let max_scroll = lines_tot.saturating_sub(inner_height);
-        let scroll_offset = self.interface.scroll_offset.min(max_scroll);
-        let scroll_from_top = lines_tot.saturating_sub(inner_height + scroll_offset);
-
+        // Draw logs.
         let para = Paragraph::new(lines).scroll((scroll_from_top as u16, 0));
 
         frame.render_widget(para, inner);
     }
 
     async fn fetch_snapshot_data(&mut self, ctx: Context) -> Result<Option<Self::DrawData>> {
-        // If we're scrolling, don't refresh.
         if self.interface.scroll_offset > 0 {
-            return Ok(None);
+            return Ok(Some(TuiInterfaceLogsDrawData {
+                buffer_snapshot: self.interface.previous_buffer.clone(),
+            }));
         }
 
         let logger = ctx.logger.read().await;
@@ -156,6 +190,9 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
                 return Ok(None);
             }
         };
+
+        // Save previous buffer.
+        self.interface.previous_buffer = buffer.clone();
 
         Ok(Some(TuiInterfaceLogsDrawData {
             buffer_snapshot: buffer,

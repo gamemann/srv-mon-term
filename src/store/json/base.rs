@@ -59,6 +59,11 @@ impl StoreExt for StoreCtx<JsonStore> {
 
         store.get_json().await?;
 
+        println!(
+            "Adding server with ID {} and address {}:{}",
+            server.id, server.ip, server.port
+        );
+
         // Check if a server with the same ID or IP/port already exists to prevent duplicates.
         if store.store_fmt.servers.iter().any(|s| s.id == server.id) {
             return Err(anyhow!(

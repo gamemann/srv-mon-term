@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 
 use crate::{
+    context::Context,
     log_debug,
     logger::level::LogLevel,
     tui::{
@@ -16,12 +17,11 @@ impl Tui {
         &self,
         interface_type: TuiInterfaceType,
         opts: Option<TuiInterfaceOpts>,
+        ctx: Context,
     ) -> Result<()> {
         match TuiInterface::new_interface(interface_type, opts) {
             Ok(interface) => {
                 let mut state = self.state.write().await;
-
-                let ctx = self.ctx()?;
 
                 // First, cleanup the current interface.
                 match state.interface.cleanup(ctx.clone()).await {

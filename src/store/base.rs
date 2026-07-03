@@ -1,13 +1,10 @@
-use std::{env::home_dir, sync::Arc};
+use std::env::home_dir;
 
 use anyhow::{Result, anyhow};
 
-use crate::{
-    context::Context,
-    store::{
-        context::StoreCtx,
-        types::{Store, json::JsonStore, sqlite::SqliteStore},
-    },
+use crate::store::{
+    context::StoreCtx,
+    types::{Store, json::JsonStore, sqlite::SqliteStore},
 };
 
 impl Store {
@@ -47,13 +44,6 @@ impl Store {
         match self {
             Store::Json(_) => "json",
             Store::Sqlite(_) => "sqlite",
-        }
-    }
-
-    pub fn set_context(&mut self, ctx: Context) {
-        match self {
-            Store::Json(store_ctx) => store_ctx.ctx = Some(Arc::downgrade(&ctx)),
-            Store::Sqlite(store_ctx) => store_ctx.ctx = Some(Arc::downgrade(&ctx)),
         }
     }
 

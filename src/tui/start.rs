@@ -21,9 +21,7 @@ impl Tui {
             let ctx = ctx_job.clone();
 
             loop {
-                let mut tui = ctx.tui.write().await;
-
-                if tui.draw_cancel_token.is_cancelled() {
+                if ctx.tui.draw_cancel_token.is_cancelled() {
                     log_info!(
                         ctx_job.logger.write().await,
                         "TUI interface draw job cancelled, exiting loop"
@@ -32,7 +30,7 @@ impl Tui {
                     break;
                 }
 
-                if let Err(e) = tui.draw().await {
+                if let Err(e) = ctx.tui.draw(ctx.clone()).await {
                     log_error!(
                         ctx_job.logger.write().await,
                         "Failed to start TUI interface draw job: {}",

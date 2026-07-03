@@ -32,7 +32,7 @@ impl Default for Logger {
                 LogLevel::Fatal,
             ],
             buffer: Arc::new(RwLock::new(VecDeque::new())),
-            max_buffer_size: 100,
+            max_buffer_size: 10000,
             path: Some("logs/%Y-%m-%d.log".to_string()),
         }
     }

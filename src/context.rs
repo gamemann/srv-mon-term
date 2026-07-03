@@ -16,7 +16,7 @@ use crate::{
 pub struct ContextInner {
     pub args: Args,
     pub logger: RwLock<Logger>,
-    pub tui: RwLock<Tui>,
+    pub tui: Arc<Tui>,
     pub store: RwLock<Store>,
 
     pub settings: RwLock<Settings>,
@@ -35,7 +35,7 @@ impl ContextInner {
         Arc::new(ContextInner {
             args,
             logger: RwLock::new(logger),
-            tui: RwLock::new(tui),
+            tui: Arc::new(tui),
             store: RwLock::new(store),
             settings: RwLock::new(Settings::default()),
             servers: RwLock::new(Vec::new()),

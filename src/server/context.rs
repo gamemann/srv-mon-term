@@ -122,19 +122,17 @@ impl ServerCtx {
     }
 
     pub async fn add(self: Arc<Self>, ctx: Context) -> Result<()> {
-        {
-            let mut servers = ctx.servers.write().await;
+        let mut servers = ctx.servers.write().await;
 
-            // Make sure the server doesn't already exist in the context.
-            if servers.iter().any(|s| s.id == self.id) {
-                return Err(anyhow!(
-                    "Server with ID {} already exists in context",
-                    self.id
-                ));
-            }
-
-            servers.push(self.clone());
+        // Make sure the server doesn't already exist in the context.
+        if servers.iter().any(|s| s.id == self.id) {
+            return Err(anyhow!(
+                "Server with ID {} already exists in context",
+                self.id
+            ));
         }
+
+        servers.push(self.clone());
 
         Ok(())
     }

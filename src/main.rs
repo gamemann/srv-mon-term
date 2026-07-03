@@ -9,7 +9,7 @@ use srv_mon_term::{
     context::ContextInner,
     log_debug, log_fatal, log_info,
     logger::Logger,
-    server::{check_server_cli, servers_setup_all},
+    server::servers_setup_all,
     store::{Store, store_setup},
     tui::types::Tui,
 };
@@ -122,15 +122,10 @@ async fn main() {
 
     // If we're not in basic mode, start the TUI.
     if !args.basic {
-        let mut tui = ctx.tui.write().await;
-
-        // First set context.
-        tui.set_ctx(ctx.clone());
-
         // Prepare TUI.
         log_debug!(logger.write().await, "Preparing TUI...");
 
-        match tui.prepare().await {
+        match ctx.tui.prepare(ctx.clone()).await {
             Ok(_) => {
                 log_debug!(logger.write().await, "Prepared TUI...");
             }
@@ -169,11 +164,9 @@ async fn main() {
 
     // Before anything, clean up our TUI if it was started.
     if !args.basic {
-        let mut tui = ctx.tui.write().await;
-
         log_info!(logger.write().await, "Cleaning up TUI...");
 
-        tui.cleanup().await;
+        ctx.tui.cleanup().await;
     }
 
     // Shut down scheduler.

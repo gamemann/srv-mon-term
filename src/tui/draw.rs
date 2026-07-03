@@ -1,23 +1,16 @@
 use anyhow::{Result, anyhow};
 use ratatui::layout::{Constraint, Direction, Layout};
 
+use crate::context::Context;
+use crate::tui::interface::ext::TuiInterfaceExt;
 use crate::tui::types::Tui;
-use crate::{log_info, logger::level::LogLevel, tui::interface::ext::TuiInterfaceExt};
 
 impl Tui {
-    pub async fn draw(&mut self) -> Result<()> {
-        let ctx = self.ctx()?;
-
+    pub async fn draw(&self, ctx: Context) -> Result<()> {
         {
-            // Retrieve terminal.
-            let term = self
-                .term
-                .as_mut()
-                .ok_or_else(|| anyhow!("Terminal not initialized"))?;
-
             // We need to attempt to fetch draw data, type, and key bindings.
             // We clone the state here since we don't intend on editing it and we don't want to hold the lock while drawing.
-            let (draw_data, int_type, key_mappings, state_clone) = {
+            let (draw_data, int_type, key_mappings) = {
                 let mut state = self.state.write().await;
 
                 let draw_data = state.interface.fetch_snapshot_data(ctx.clone()).await?;
@@ -25,8 +18,13 @@ impl Tui {
                 let int_type = state.interface.get_type().clone();
                 let key_mappings = state.interface.get_key_bindings().clone();
 
-                (draw_data, int_type, key_mappings, state.clone())
+                (draw_data, int_type, key_mappings)
             };
+
+            let state = self.state.read().await;
+
+            // Retrieve terminal.
+            let mut term = self.term.lock().await;
 
             // Draw the current interface.
             term.draw(|frame| {
@@ -46,7 +44,7 @@ impl Tui {
                 // First, let's draw the header that includes the top-level key mappings.
                 Tui::draw_header(frame, root[0], int_type);
 
-                state_clone
+                state
                     .interface
                     .draw(frame, root[1], ctx.clone(), draw_data.as_ref());
 

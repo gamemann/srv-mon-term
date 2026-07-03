@@ -40,7 +40,6 @@ pub fn draw_server_latency(
         return;
     }
 
-    // Find max latency for scaling (ignoring offline samples)
     let max_val = samples
         .iter()
         .filter(|s| s.online)
@@ -49,12 +48,6 @@ pub fn draw_server_latency(
         .unwrap_or(1)
         .max(1); // avoid div by zero
 
-    // Build BarChart bars. Offline samples → full-height red bar (we encode
-    // them as a sentinel value equal to max and color them separately via a
-    // second pass using styles). Ratatui's BarChart doesn't support per-bar
-    // colors directly, so we use two BarGroups — one for online, one offline —
-    // but since they share the same axis that's messy. Instead we render a
-    // custom block-character sparkline with Paragraph for full color control.
     draw_sparkline_paragraph(frame, area, &samples, max_val);
 }
 
@@ -70,8 +63,23 @@ fn draw_sparkline_paragraph(
 
     let mut spans: Vec<Span> = Vec::with_capacity(samples.len() + 8);
 
-    // Label on the left
-    spans.push(Span::styled("ms ", Style::default().fg(Color::DarkGray)));
+    // Current latency value on the left
+    if let Some(last) = samples.last() {
+        let lat = last.val as f64 / 1000.0;
+        let lat_col = latency_color(lat);
+
+        let val_str = if last.online {
+            format!(" {:.2}ms", lat)
+        } else {
+            " offline".to_string()
+        };
+
+        let color = if last.online { lat_col } else { Color::Red };
+
+        spans.push(Span::styled(val_str, Style::default().fg(color)));
+    }
+
+    spans.push(Span::raw(" "));
 
     for sample in samples {
         if !sample.online {
@@ -82,26 +90,9 @@ fn draw_sparkline_paragraph(
             let idx = (ratio * (BLOCKS.len() - 1) as f64).round() as usize;
             let ch = BLOCKS[idx];
 
-            // Color: green → yellow → red as latency increases
-            let color = latency_color(sample.val);
+            let color = latency_color(sample.val as f64 / 1000.0);
             spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
         }
-    }
-
-    // Current latency value on the right
-    if let Some(last) = samples.last() {
-        let lat_col = latency_color(last.val);
-        let latency = last.val as f64 / 1000.0;
-
-        let val_str = if last.online {
-            format!(" {}ms", latency)
-        } else {
-            " offline".to_string()
-        };
-
-        let color = if last.online { lat_col } else { Color::Red };
-
-        spans.push(Span::styled(val_str, Style::default().fg(color)));
     }
 
     let line = Line::from(spans);
@@ -119,10 +110,10 @@ fn draw_sparkline_paragraph(
     frame.render_widget(Paragraph::new(line), rows[1]);
 }
 
-fn latency_color(ms: u64) -> Color {
-    if ms < 80 {
+fn latency_color(ms: f64) -> Color {
+    if ms < 80.0 {
         Color::Green
-    } else if ms < 150 {
+    } else if ms < 150.0 {
         Color::Yellow
     } else {
         Color::Red
