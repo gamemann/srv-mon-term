@@ -1,6 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use anyhow::{Result, bail};
+use ratatui::style::Color;
 use surge_ping::ping;
 
 use crate::context::Context;
@@ -141,5 +142,15 @@ impl ServerCtx {
         }
 
         Ok(())
+    }
+}
+
+pub fn get_latency_color(ms: f64) -> Color {
+    if ms < 80.0 {
+        Color::Green
+    } else if ms < 150.0 {
+        Color::Yellow
+    } else {
+        Color::LightRed
     }
 }

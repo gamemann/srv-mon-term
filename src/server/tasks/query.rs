@@ -13,9 +13,6 @@ impl ServerCtx {
         let job_ctx = ctx.clone();
         let job_self = self.clone();
 
-        // Let's lock the scheduler.
-        let sch = ctx.sch.read().await;
-
         let interval = {
             let server = self.server.read().await;
 
@@ -84,6 +81,9 @@ impl ServerCtx {
 
         // Retrieve the job ID before adding it to the scheduler.
         let job_id = job.guid();
+
+        // Let's lock the scheduler.
+        let sch = ctx.sch.read().await;
 
         sch.add(job)
             .await

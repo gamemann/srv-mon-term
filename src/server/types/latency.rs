@@ -25,7 +25,18 @@ pub struct ServerLatency {
     pub online: bool,
     pub type_: ServerLatencyType,
     pub ts: u64,
-    pub val: u64,
+    pub val: u64, // Stored in microseconds!
+}
+
+impl ServerLatency {
+    /// Retrieves the amount of latency in milliseconds.
+    ///
+    /// # Returns
+    ///
+    /// The latency in milliseconds as a floating-point number.
+    pub fn get_latency_ms(&self) -> f64 {
+        return self.val as f64 / 1000.0;
+    }
 }
 
 impl Default for ServerLatency {

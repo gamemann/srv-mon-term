@@ -2,10 +2,12 @@ use std::sync::Arc;
 
 use anyhow::{Result, anyhow, bail};
 
+use crate::cli::QueryMonitor;
 use crate::context::Context;
 
 use crate::server::check_server_cli;
 use crate::server::context::ServerCtx;
+use crate::server::types::latency::ServerLatencyType;
 use crate::store::ext::StoreExt;
 use crate::store::server::ServerStore;
 use crate::{log_info, logger::level::LogLevel};
@@ -194,6 +196,207 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                 );
             }
         }
+    }
+
+    // Setup scheduler shutdown handler here.
+    {
+        
+
+        // Clone things we need for the shutdown handler.
+        let shutdown_ctx = ctx.clone();
+
+        let mut sch = ctx.sch.write().await;
+        
+        sch.set_shutdown_handler(Box::new(move || {
+            let ctx = shutdown_ctx.clone();
+                
+            Box::pin(async move {
+                // We need to loop through all servers and log their latency summaries.
+                let servers = ctx.servers.read().await;
+
+                log_info!(
+                    ctx.logger.write().await,
+                    "Scheduler shutdown initiated. Logging latency summaries for all servers..."
+                );
+
+                for srv_ctx in servers.iter() {
+                    let self_clone = srv_ctx.clone();
+                    let ctx = ctx.clone();
+
+                    let addr = {
+                        let server = self_clone.server.read().await;
+
+                        format!("{}:{}", server.ip, server.port)
+                    };
+
+                    let query_monitor = ctx.args.parse_query_monitor().unwrap_or(QueryMonitor::Info);
+                    
+                    // Retrieve minimum, maximum and average latency for each type and log it.
+                    let (info_min, info_max, info_avg) = if query_monitor == QueryMonitor::Info {
+                        
+                        let history = self_clone.latency.read().await;
+
+                        let history = history
+                            .iter()
+                            .filter(|x| (x.type_ == ServerLatencyType::A2sInfo || x.type_ == ServerLatencyType::SelfInfo) && x.val > 0)
+                            .collect::<Vec<_>>();
+
+                        let min = history
+                            .iter()
+                            .min_by_key(|l| l.val)
+                            .map(|l| l.val)
+                            .unwrap_or(0);
+
+                        let max = history
+                            .iter()
+                            .max_by_key(|l| l.val)
+                            .map(|l| l.val)
+                            .unwrap_or(0);
+
+                        let avg = if history.len() > 0 {
+                            history.iter().map(|l| l.val).sum::<u64>() / history.len() as u64
+                        } else {
+                            0
+                        };
+
+                        (
+                            min as f64 / 1000.0,
+                            max as f64 / 1000.0,
+                            avg as f64 / 1000.0,
+                        )
+                    } else { 
+                        (0.0, 0.0, 0.0)
+                    };
+
+                    let (users_min, users_max, users_avg) = if query_monitor == QueryMonitor::Users {
+                        let history = self_clone.latency.read().await;
+
+                        let history = history
+                            .iter()
+                            .filter(|x| (x.type_ == ServerLatencyType::A2sPlayers || x.type_ == ServerLatencyType::SelfUsers) && x.val > 0)
+                            .collect::<Vec<_>>();
+
+                        let min = history
+                            .iter()
+                            .min_by_key(|l| l.val)
+                            .map(|l| l.val)
+                            .unwrap_or(0);
+
+                        let max = history
+                            .iter()
+                            .max_by_key(|l| l.val)
+                            .map(|l| l.val)
+                            .unwrap_or(0);
+
+                        let avg = if history.len() > 0 {
+                            history.iter().map(|l| l.val).sum::<u64>() / history.len() as u64
+                        } else {
+                            0
+                        };
+
+                        (
+                            min as f64 / 1000.0,
+                            max as f64 / 1000.0,
+                            avg as f64 / 1000.0,
+                        )
+                    } else {
+                        (0.0, 0.0, 0.0)
+                    };
+
+                    let (vars_min, vars_max, vars_avg) = if query_monitor == QueryMonitor::Vars {
+                        let history = self_clone.latency.read().await;
+
+                        let history = history
+                            .iter()
+                            .filter(|x| (x.type_ == ServerLatencyType::A2sRules || x.type_ == ServerLatencyType::SelfVars) && x.val > 0)
+                            .collect::<Vec<_>>();
+
+                        let min = history
+                            .iter()
+                            .min_by_key(|l| l.val)
+                            .map(|l| l.val)
+                            .unwrap_or(0);
+
+                        let max = history
+                            .iter()
+                            .max_by_key(|l| l.val)
+                            .map(|l| l.val)
+                            .unwrap_or(0);
+
+                        let avg = if history.len() > 0 {
+                            history.iter().map(|l| l.val).sum::<u64>() / history.len() as u64
+                        } else {
+                            0
+                        };
+
+                        (
+                            min as f64 / 1000.0,
+                            max as f64 / 1000.0,
+                            avg as f64 / 1000.0,
+                        )
+                    } else {
+                        (0.0, 0.0, 0.0)
+                    };
+
+                    match query_monitor {
+                        QueryMonitor::Info => {
+                            if info_avg > 0.0 {
+                                log_info!(
+                                    ctx.logger.write().await,
+                                    "Latency summary for server {} (Info): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
+                                    addr,
+                                    info_min,
+                                    info_max,
+                                    info_avg
+                                );
+                            } else {
+                                log_info!(
+                                    ctx.logger.write().await,
+                                    "Latency summary for server {} (Info): No data available (Offline?)",
+                                    addr
+                                );
+                            }
+                        }
+                        QueryMonitor::Users => {
+                            if users_avg > 0.0 {
+                                log_info!(
+                                    ctx.logger.write().await,
+                                    "Latency summary for server {} (Users): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
+                                    addr,
+                                    users_min,
+                                    users_max,
+                                    users_avg
+                                );
+                            } else {
+                                log_info!(
+                                    ctx.logger.write().await,
+                                    "Latency summary for server {} (Users): No data available (Offline?)",
+                                    addr
+                                );
+                            }
+                        }
+                        QueryMonitor::Vars => {
+                            if vars_avg > 0.0 {
+                                log_info!(
+                                    ctx.logger.write().await,
+                                    "Latency summary for server {} (Vars): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
+                                    addr,
+                                    vars_min,
+                                    vars_max,
+                                    vars_avg
+                                );
+                            } else {
+                                log_info!(
+                                    ctx.logger.write().await,
+                                    "Latency summary for server {} (Vars): No data available (Offline?)",
+                                    addr
+                                );
+                            }
+                        }
+                    }
+                }
+            })
+        }));
     }
 
     Ok(())

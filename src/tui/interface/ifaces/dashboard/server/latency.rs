@@ -8,7 +8,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::server::types::latency::ServerLatency;
+use crate::server::{latency::get_latency_color, types::latency::ServerLatency};
 
 // How many latency history points to show in the mini sparkline.
 const SPARK_WIDTH: usize = 30;
@@ -66,7 +66,7 @@ fn draw_sparkline_paragraph(
     // Current latency value on the left
     if let Some(last) = samples.last() {
         let lat = last.val as f64 / 1000.0;
-        let lat_col = latency_color(lat);
+        let lat_col = get_latency_color(lat);
 
         let val_str = if last.online {
             format!(" {:.2}ms", lat)
@@ -90,7 +90,7 @@ fn draw_sparkline_paragraph(
             let idx = (ratio * (BLOCKS.len() - 1) as f64).round() as usize;
             let ch = BLOCKS[idx];
 
-            let color = latency_color(sample.val as f64 / 1000.0);
+            let color = get_latency_color(sample.val as f64 / 1000.0);
             spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
         }
     }
@@ -108,14 +108,4 @@ fn draw_sparkline_paragraph(
         .split(area);
 
     frame.render_widget(Paragraph::new(line), rows[1]);
-}
-
-fn latency_color(ms: f64) -> Color {
-    if ms < 80.0 {
-        Color::Green
-    } else if ms < 150.0 {
-        Color::Yellow
-    } else {
-        Color::Red
-    }
 }

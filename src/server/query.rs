@@ -19,7 +19,7 @@ pub struct QueryResponse {
 }
 
 impl ServerCtx {
-    async fn print_query_info(&self, latency: u64, query_monitor: &QueryMonitor) {
+    async fn print_query_info(&self, latency: f64, query_monitor: &QueryMonitor) {
         let (tag, data, users_len, vars_len) = {
             let server = self.server.read().await;
 
@@ -39,11 +39,9 @@ impl ServerCtx {
 
         content.push_str(&format!("{}: ", tag));
 
-        let latency_ms = latency as f64 / 1000.0;
-
         match data.status {
             ServerStatus::Online => {
-                content.push_str(&format!("Reply in {:.2}ms. ", latency_ms));
+                content.push_str(&format!("Reply in {:.2}ms. ", latency));
 
                 match query_monitor {
                     QueryMonitor::Info => {
@@ -451,7 +449,8 @@ impl ServerCtx {
                 QueryMonitor::Vars => latency_vars,
             };
 
-            self.print_query_info(latency_to_use, &query_monitor).await;
+            self.print_query_info(latency_to_use as f64 / 1000.0, &query_monitor)
+                .await;
         }
 
         Ok(QueryResponse {

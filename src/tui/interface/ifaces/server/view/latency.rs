@@ -8,7 +8,10 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::server::types::latency::{ServerLatency, ServerLatencyType};
+use crate::server::{
+    latency::get_latency_color,
+    types::latency::{ServerLatency, ServerLatencyType},
+};
 
 // 9 fill levels per row cell: empty + 8 partial/full block heights.
 const BLOCKS: &[char] = &[' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
@@ -114,7 +117,7 @@ pub fn draw_server_latency_detail(
 
         let ratio = (lat_real / lat_max).clamp(0.0, 1.0);
         let units = (ratio * total_units).round() as usize;
-        let color = latency_color(lat_real);
+        let color = get_latency_color(lat_real);
 
         for row_from_bottom in 0..height {
             let row_units_start = row_from_bottom * SUB_LEVELS;
@@ -205,7 +208,7 @@ fn draw_stats_and_meta(
             let lat_real = s.val as f64 / 1000.0;
 
             if s.online {
-                (format!("{:.2}ms", lat_real), latency_color(lat_real))
+                (format!("{:.2}ms", lat_real), get_latency_color(lat_real))
             } else {
                 ("offline".to_string(), Color::Red)
             }
@@ -258,16 +261,6 @@ fn draw_stats_and_meta(
     ]);
 
     frame.render_widget(Paragraph::new(meta_line), meta_area);
-}
-
-fn latency_color(ms: f64) -> Color {
-    if ms < 80.0 {
-        Color::Green
-    } else if ms < 150.0 {
-        Color::Yellow
-    } else {
-        Color::Red
-    }
 }
 
 fn latency_type_label(t: &ServerLatencyType) -> &'static str {
