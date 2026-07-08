@@ -7,9 +7,16 @@ use a2s::info::ServerOS as A2sServerOs;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
 pub enum ServerStatus {
+    Unknown,
     Online,
     Offline,
-    Error,
+    Error(u16),
+}
+
+impl Default for ServerStatus {
+    fn default() -> Self {
+        ServerStatus::Unknown
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
@@ -31,9 +38,6 @@ impl From<A2sServerOs> for ServerOs {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ServerData {
-    pub status: ServerStatus,
-    pub status_code: Option<u16>,
-
     pub users: Vec<ServerUser>,
     pub vars: Vec<ServerVar>,
 
@@ -62,9 +66,6 @@ pub struct ServerData {
 impl Default for ServerData {
     fn default() -> Self {
         Self {
-            status: ServerStatus::Offline,
-            status_code: None,
-
             users: Vec::new(),
             vars: Vec::new(),
 

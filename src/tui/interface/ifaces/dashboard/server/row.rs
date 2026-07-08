@@ -20,16 +20,15 @@ pub fn draw_server_row(
     frame: &mut Frame<'_>,
     area: Rect,
     server: &Server,
+    status: ServerStatus,
     latency_history: &VecDeque<ServerLatency>,
     is_selected: bool,
 ) {
     let data = &server.data;
-    let is_online = data.status == ServerStatus::Online;
-
     // Border color: yellow when selected, green/red based on status otherwise.
     let border_color = if is_selected {
         Color::Yellow
-    } else if is_online {
+    } else if status == ServerStatus::Online {
         Color::Green
     } else {
         Color::Red
@@ -57,6 +56,6 @@ pub fn draw_server_row(
         ])
         .split(inner);
 
-    draw_server_info(frame, cols[0], server, is_online);
+    draw_server_info(frame, cols[0], server, status == ServerStatus::Online);
     draw_server_latency(frame, cols[1], latency_history);
 }

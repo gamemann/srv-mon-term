@@ -13,8 +13,12 @@ use ratatui::{
 };
 
 use crate::{
+    cli::QueryMonitor,
     context::Context,
-    server::{Server, ServerCtx, types::latency::ServerLatency},
+    log_error,
+    server::{
+        Server, ServerCtx, ServerStatuses, data::ServerStatus, types::latency::ServerLatency,
+    },
     tui::{
         action::TuiAction,
         interface::{
@@ -97,6 +101,8 @@ pub struct TuiInterfaceServerViewDrawData {
     pub id: String,
     pub server: Server,
     pub latency_history: VecDeque<ServerLatency>,
+    pub statuses: ServerStatuses,
+    pub status: ServerStatus,
 }
 
 impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
@@ -230,8 +236,18 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(rows[1]);
 
-        draw_server_general(frame, top_cols[0], &server);
+        // Retrieve server status.
+        let status = &draw_data.status;
+
+        draw_server_general(frame, top_cols[0], &server, status.clone());
         draw_server_latency_detail(frame, top_cols[1], &server.latency_type, &latency_history);
+
+        let user_status = &draw_data.statuses.query_users;
+        let user_err_num = if let ServerStatus::Error(code) = user_status {
+            Some(code.clone())
+        } else {
+            None
+        };
 
         draw_server_users(
             frame,
@@ -239,7 +255,16 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
             &server.data.users,
             self.interface.users_selected,
             self.interface.focus == ServerViewFocus::Users,
+            matches!(user_status, ServerStatus::Error(_)),
+            user_err_num,
         );
+
+        let vars_status = &draw_data.statuses.query_vars;
+        let vars_err_num = if let ServerStatus::Error(code) = vars_status {
+            Some(code.clone())
+        } else {
+            None
+        };
 
         draw_server_vars(
             frame,
@@ -247,6 +272,8 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
             &server.data.vars,
             self.interface.vars_selected,
             self.interface.focus == ServerViewFocus::Vars,
+            matches!(vars_status, ServerStatus::Error(_)),
+            vars_err_num,
         );
     }
 
@@ -256,11 +283,16 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceServerView> {
 
         let srv_ctx = ServerCtx::get_server_ctx_by_id(ctx.clone(), &id).await?;
         let server = srv_ctx.server.read().await.clone();
+        let statuses = srv_ctx.statuses.read().await;
+
+        let status = srv_ctx.get_status(statuses.clone(), ctx.clone()).await;
 
         Ok(Some(Self::DrawData {
             id,
             server,
             latency_history: srv_ctx.latency.read().await.clone(),
+            statuses: statuses.clone(),
+            status,
         }))
     }
 }

@@ -4,7 +4,13 @@ use anyhow::{Result, anyhow};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, job::job_data::Uuid};
 
-use crate::{context::Context, log_error, log_trace, logger::level::LogLevel, server::ServerCtx};
+use crate::{
+    context::Context,
+    log_error, log_info, log_trace,
+    logger::Logger,
+    logger::level::LogLevel,
+    server::{ServerCtx, data::ServerStatus},
+};
 
 impl ServerCtx {
     pub async fn setup_task_latency(self: Arc<Self>, ctx: Context) -> Result<Uuid> {
@@ -31,22 +37,19 @@ impl ServerCtx {
 
                 let self_clone = self_clone.clone();
 
-                let (addr, id) = {
+                let addr = {
                     let server = self_clone.server.read().await;
 
                     let addr = format!("{}:{}", server.ip, server.port);
 
-                    let id = self_clone.id.clone();
-
-                    (addr, id)
+                    addr
                 };
 
                 // Ensure task isn't already running.
                 let _guard = match lock.try_lock_owned() {
                     Ok(guard) => guard,
                     Err(_) => {
-                        log_trace!(
-                            ctx.logger.write().await,
+                        log_trace!(ctx,
                             "Latency task for server {} is already running, skipping...",
                             addr
                         );
@@ -56,17 +59,28 @@ impl ServerCtx {
                 };
 
                 match self_clone.run_custom_latency(ctx.clone()).await {
-                    Ok(_) => (),
-                    Err(e) => {
-                        let id = id.clone();
+                    Ok(_) => {
+                        let mut statuses = self_clone.statuses.write().await;
 
-                        log_error!(
-                            ctx.logger.write().await,
-                            "Failed to run latency check for server {} ({}): {}",
-                            id,
+                        if statuses.latency != ServerStatus::Online {
+                            log_info!(ctx,
+                                "Latency task for server '{}' completed successfully, setting status to online.",
+                                addr
+                            );
+
+                            statuses.latency = ServerStatus::Online;
+                        }
+                    }
+                    Err(e) => {
+                        log_error!(ctx,
+                            "Failed to run latency task for server '{}': {}",
                             addr,
                             e
                         );
+
+                        // Set the latency status to offline since the task has failed.
+                        let mut statuses = self_clone.statuses.write().await;
+                        statuses.latency = ServerStatus::Offline;
                     }
                 }
             })

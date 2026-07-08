@@ -10,19 +10,18 @@ use crate::server::context::ServerCtx;
 use crate::server::types::latency::ServerLatencyType;
 use crate::store::ext::StoreExt;
 use crate::store::server::ServerStore;
-use crate::{log_info, logger::level::LogLevel};
+use crate::{log_info, logger::level::LogLevel, logger::Logger};
 use crate::{log_trace, log_warn};
 
 pub async fn servers_setup_all(ctx: Context) -> Result<()> {
     let args = ctx.args.clone();
 
     let mut servers_store = if !args.isolate {
-        let mut store = ctx.store.write().await;
+        let store = ctx.store.read().await;
 
         match store.srv_fetch_all().await {
             Ok(res) => {
-                log_info!(
-                    ctx.logger.write().await,
+                log_info!(ctx,
                     "Fetched {} servers from store.",
                     res.len()
                 );
@@ -62,8 +61,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                         )
                     })?;
 
-                    log_info!(
-                        ctx.logger.write().await,
+                    log_info!(ctx,
                         "Deleted server {}:{} from store from CLI delete flag.",
                         s.ip,
                         s.port
@@ -111,7 +109,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
         ));
     }
 
-    log_trace!(ctx.logger.write().await, "Clearing servers...");
+    log_trace!(ctx, "Clearing servers...");
 
     // Reset the servers context vector.
     ctx.servers.write().await.clear();
@@ -120,8 +118,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
     for server in servers_store {
         let addr = format!("{}:{}", server.ip, server.port);
 
-        log_trace!(
-            ctx.logger.write().await,
+        log_trace!(ctx,
             "Setting up server context for {}...",
             addr
         );
@@ -139,23 +136,20 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
             server.port_query,
         ));
 
-        log_trace!(
-            ctx.logger.write().await,
+        log_trace!(ctx,
             "Successfully created server context for {}",
             addr
         );
 
         match ServerCtx::add(new_ctx.clone(), ctx.clone()).await {
             Ok(_) => {
-                log_trace!(
-                    ctx.logger.write().await,
+                log_trace!(ctx,
                     "Successfully added server context to main vector {}.",
                     addr
                 );
             }
             Err(e) => {
-                log_warn!(
-                    ctx.logger.write().await,
+                log_warn!(ctx,
                     "Failed to add server context for {}: {}",
                     addr,
                     e
@@ -171,7 +165,8 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
             .await
             .map_err(|e| anyhow!("Failed to setup tasks for server '{}': {}", addr, e))?;
 
-        if args.add
+        // Make sure we save the server to the store if the CLI flag is set and the server matches the CLI server.
+        if args.save
             && let Some(ref s) = srv_cli
         {
             if s.ip == server.ip && s.port == server.port {
@@ -188,8 +183,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                     anyhow!("Failed to add server {}:{} to store: {}", s.ip, s.port, e)
                 })?;
 
-                log_info!(
-                    ctx.logger.write().await,
+                log_info!(ctx,
                     "Added new server {}:{} to store from CLI add flag.",
                     s.ip,
                     s.port
@@ -200,13 +194,11 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
 
     // Setup scheduler shutdown handler here.
     {
-        
-
-        // Clone things we need for the shutdown handler.
+        // We need to clone a separate context due to sch borrowing it.
         let shutdown_ctx = ctx.clone();
 
         let mut sch = ctx.sch.write().await;
-        
+
         sch.set_shutdown_handler(Box::new(move || {
             let ctx = shutdown_ctx.clone();
                 
@@ -214,8 +206,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                 // We need to loop through all servers and log their latency summaries.
                 let servers = ctx.servers.read().await;
 
-                log_info!(
-                    ctx.logger.write().await,
+                log_info!(ctx,
                     "Scheduler shutdown initiated. Logging latency summaries for all servers..."
                 );
 
@@ -341,8 +332,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                     match query_monitor {
                         QueryMonitor::Info => {
                             if info_avg > 0.0 {
-                                log_info!(
-                                    ctx.logger.write().await,
+                                log_info!(ctx,
                                     "Latency summary for server {} (Info): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
                                     addr,
                                     info_min,
@@ -350,8 +340,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                                     info_avg
                                 );
                             } else {
-                                log_info!(
-                                    ctx.logger.write().await,
+                                log_info!(ctx,
                                     "Latency summary for server {} (Info): No data available (Offline?)",
                                     addr
                                 );
@@ -359,8 +348,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                         }
                         QueryMonitor::Users => {
                             if users_avg > 0.0 {
-                                log_info!(
-                                    ctx.logger.write().await,
+                                log_info!(ctx,
                                     "Latency summary for server {} (Users): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
                                     addr,
                                     users_min,
@@ -368,8 +356,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                                     users_avg
                                 );
                             } else {
-                                log_info!(
-                                    ctx.logger.write().await,
+                                log_info!(ctx,
                                     "Latency summary for server {} (Users): No data available (Offline?)",
                                     addr
                                 );
@@ -377,8 +364,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                         }
                         QueryMonitor::Vars => {
                             if vars_avg > 0.0 {
-                                log_info!(
-                                    ctx.logger.write().await,
+                                log_info!(ctx,
                                     "Latency summary for server {} (Vars): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
                                     addr,
                                     vars_min,
@@ -386,8 +372,7 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
                                     vars_avg
                                 );
                             } else {
-                                log_info!(
-                                    ctx.logger.write().await,
+                                log_info!(ctx,
                                     "Latency summary for server {} (Vars): No data available (Offline?)",
                                     addr
                                 );

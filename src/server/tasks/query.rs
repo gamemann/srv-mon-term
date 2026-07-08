@@ -5,7 +5,8 @@ use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, job::job_data::Uuid};
 
 use crate::{
-    context::Context, log_debug, log_error, log_trace, logger::level::LogLevel, server::ServerCtx,
+    context::Context, log_debug, log_error, log_trace, logger::Logger, logger::level::LogLevel,
+    server::ServerCtx,
 };
 impl ServerCtx {
     pub async fn setup_task_query(self: Arc<Self>, ctx: Context) -> Result<Uuid> {
@@ -16,7 +17,7 @@ impl ServerCtx {
         let interval = {
             let server = self.server.read().await;
 
-            server.latency_interval.unwrap_or(server.query_interval)
+            server.query_interval
         };
 
         let lock = Arc::new(Mutex::new(()));
@@ -47,7 +48,7 @@ impl ServerCtx {
                     Ok(guard) => guard,
                     Err(_) => {
                         log_trace!(
-                            ctx.logger.write().await,
+                            ctx,
                             "Query task for server {} is already running, skipping...",
                             addr
                         );
@@ -56,22 +57,12 @@ impl ServerCtx {
                     }
                 };
 
-                log_debug!(
-                    ctx.logger.write().await,
-                    "Running query task for server '{}'...",
-                    addr
-                );
+                log_debug!(ctx, "Running query task for server '{}'...", addr);
 
                 if let Err(e) = self_clone.query_server(ctx.clone()).await {
                     let id = id.clone();
 
-                    log_error!(
-                        ctx.logger.write().await,
-                        "Failed to query server {} ({}): {}",
-                        id,
-                        addr,
-                        e
-                    );
+                    log_error!(ctx, "Failed to query server {} ({}): {}", id, addr, e);
 
                     return;
                 }

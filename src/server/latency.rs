@@ -44,7 +44,7 @@ impl ServerCtx {
 
                 let latency = duration.as_millis() as u64;
 
-                self.add_latency(ctx, latency).await
+                self.add_latency(ctx, ServerStatus::Online, latency).await
             }
             ServerLatencyType::A2sInfo
             | ServerLatencyType::A2sPlayers
@@ -102,7 +102,7 @@ impl ServerCtx {
                     _ => 0, // Should NOTTT get here lol
                 };
 
-                self.add_latency(ctx, latency).await
+                self.add_latency(ctx, ServerStatus::Online, latency).await
             }
 
             ServerLatencyType::SelfInfo
@@ -117,15 +117,16 @@ impl ServerCtx {
         latencies.back().map(|l| l.val.clone())
     }
 
-    pub async fn add_latency(&self, _ctx: Context, latency: u64) -> Result<()> {
-        let (status, latency_type, latency_history_size) = {
+    pub async fn add_latency(
+        &self,
+        _ctx: Context,
+        status: ServerStatus,
+        latency: u64,
+    ) -> Result<()> {
+        let (latency_type, latency_history_size) = {
             let server = self.server.read().await;
 
-            (
-                server.data.status.clone(),
-                server.latency_type.clone(),
-                server.latency_history_size,
-            )
+            (server.latency_type.clone(), server.latency_history_size)
         };
 
         let mut latencies = self.latency.write().await;

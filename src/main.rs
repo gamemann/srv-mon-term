@@ -10,6 +10,7 @@ use srv_mon_term::{
     log_debug, log_fatal, log_info,
     logger::Logger,
     server::servers_setup_all,
+    settings::SETTINGS_DEFAULT_LOG_MAX_BUFFER_SIZE,
     store::{Store, store_setup},
     tui::types::Tui,
 };
@@ -24,44 +25,78 @@ async fn main() {
     let args = Args::parse();
 
     // Parse log levels.
-    let log_levels = args.parse_log_levels();
+    let log_levels = if let Some(levels) = &args.log_levels {
+        Some(Args::parse_log_levels(levels.clone()))
+    } else {
+        None
+    };
 
     // Initialize logger.
-    let mut logger = Logger::new(log_levels, args.log_path.clone(), args.basic).await;
+    let logger = Logger::new(
+        args.log_path.clone(),
+        args.log_max_buffer_size
+            .unwrap_or(SETTINGS_DEFAULT_LOG_MAX_BUFFER_SIZE),
+        args.basic,
+        log_levels,
+    )
+    .await;
 
-    log_info!(logger, "Starting srv-mon-term...");
-    log_info!(logger, "Initialized logger...");
+    // We use log_internal() until we create the context.
+    logger
+        .log_internal(LogLevel::Info, "Starting srv-mon-term...")
+        .await;
+
+    logger
+        .log_internal(LogLevel::Info, "Initialized logger...")
+        .await;
 
     // Create empty TUI for context.
     let tui = Tui::new();
 
     // Initialize storage.
-    log_info!(logger, "Attempting to initialize store...");
+    logger
+        .log_internal(LogLevel::Debug, "Attempting to initialize store...")
+        .await;
 
     let store = match Store::new(&args.clone().store, args.clone().store_path) {
         Ok(store) => {
-            log_info!(logger, "Initialized store...");
+            logger
+                .log_internal(LogLevel::Info, "Initialized store...")
+                .await;
 
             store
         }
         Err(e) => {
-            log_fatal!(logger, "Failed to initialize store: {}", e);
+            logger
+                .log_internal(
+                    LogLevel::Fatal,
+                    &format!("Failed to initialize store: {}", e),
+                )
+                .await;
 
             process::exit(1);
         }
     };
 
     // Initialize scheduler.
-    log_debug!(logger, "Attempting to initialize scheduler...");
+    logger
+        .log_internal(LogLevel::Debug, "Attempting to initialize scheduler...")
+        .await;
 
     let sch = match JobScheduler::new().await {
         Ok(sch) => {
-            log_info!(logger, "Initialized scheduler...");
-
+            logger
+                .log_internal(LogLevel::Info, "Initialized scheduler...")
+                .await;
             sch
         }
         Err(e) => {
-            log_fatal!(logger, "Failed to initialize scheduler: {}", e);
+            logger
+                .log_internal(
+                    LogLevel::Fatal,
+                    &format!("Failed to initialize scheduler: {}", e),
+                )
+                .await;
 
             process::exit(1);
         }
@@ -69,40 +104,35 @@ async fn main() {
 
     // Create context now so that we can access crucial components like the logger and store when initializing the scheduler and TUI.
     let ctx = ContextInner::new(args, logger, tui, store, sch);
-
-    // less code \O/
-    let logger = &ctx.logger;
-    let args = &ctx.args;
-
-    log_debug!(logger.write().await, "Attempting to initialize store...");
+    log_debug!(ctx, "Attempting to initialize store...");
 
     // Attempt to initialize store.
     match store_setup(ctx.clone()).await {
         Ok(_) => {
-            log_info!(logger.write().await, "Set up store...");
+            log_info!(ctx, "Set up store...");
         }
         Err(e) => {
-            log_fatal!(logger.write().await, "Failed to set up store: {}", e);
+            log_fatal!(ctx, "Failed to set up store: {}", e);
 
             process::exit(1);
         }
     }
 
-    log_info!(logger.write().await, "Attempting to initialize servers...");
+    log_info!(ctx, "Attempting to initialize servers...");
 
     // Setup servers as long as we're not in isolation mode.
     match servers_setup_all(ctx.clone()).await {
         Ok(_) => {
-            log_info!(logger.write().await, "Set up servers...");
+            log_info!(ctx, "Set up servers...");
         }
         Err(e) => {
-            log_fatal!(logger.write().await, "Failed to set up servers: {}", e);
+            log_fatal!(ctx, "Failed to set up servers: {}", e);
 
             process::exit(1);
         }
     }
 
-    log_debug!(logger.write().await, "Attempting to set up scheduler...");
+    log_debug!(ctx, "Attempting to set up scheduler...");
 
     // Start the scheduler.
     {
@@ -110,41 +140,44 @@ async fn main() {
 
         match sch.start().await {
             Ok(_) => {
-                log_info!(logger.write().await, "Set up scheduler...");
+                log_info!(ctx, "Started the scheduler...");
             }
             Err(e) => {
-                log_fatal!(logger.write().await, "Failed to set up scheduler: {}", e);
+                log_fatal!(ctx, "Failed to start scheduler: {}", e);
 
                 process::exit(1);
             }
         }
     }
 
+    // less code \O/
+    let args = &ctx.args;
+
     // If we're not in basic mode, start the TUI.
     if !args.basic {
         // Prepare TUI.
-        log_debug!(logger.write().await, "Preparing TUI...");
+        log_debug!(ctx, "Preparing TUI...");
 
         match ctx.tui.prepare(ctx.clone()).await {
             Ok(_) => {
-                log_debug!(logger.write().await, "Prepared TUI...");
+                log_debug!(ctx, "Prepared TUI...");
             }
             Err(e) => {
-                log_fatal!(logger.write().await, "Failed to prepare TUI: {}", e);
+                log_fatal!(ctx, "Failed to prepare TUI: {}", e);
 
                 process::exit(1);
             }
         }
 
         // Now start the TUI.
-        log_info!(logger.write().await, "Starting TUI...");
+        log_info!(ctx, "Starting TUI...");
 
         match Tui::start(ctx.clone()).await {
             Ok(_) => {
-                log_info!(logger.write().await, "Started TUI...");
+                log_info!(ctx, "Started TUI...");
             }
             Err(e) => {
-                log_fatal!(logger.write().await, "Failed to start TUI: {}", e);
+                log_fatal!(ctx, "Failed to start TUI: {}", e);
 
                 process::exit(1);
             }
@@ -154,7 +187,7 @@ async fn main() {
     loop {
         select! {
             _ = ctx.cancel_token.cancelled() => {
-                log_info!(logger.write().await, "Cancellation signal received, shutting down...");
+                log_info!(ctx, "Cancellation signal received, shutting down...");
 
 
                 break;
@@ -164,7 +197,7 @@ async fn main() {
 
     // Before anything, clean up our TUI if it was started.
     if !args.basic {
-        log_info!(logger.write().await, "Cleaning up TUI...");
+        log_info!(ctx, "Cleaning up TUI...");
 
         ctx.tui.cleanup().await;
     }
@@ -175,10 +208,10 @@ async fn main() {
 
         match sch.shutdown().await {
             Ok(_) => {
-                log_info!(logger.write().await, "Shut down scheduler...");
+                log_info!(ctx, "Shut down scheduler...");
             }
             Err(e) => {
-                log_fatal!(logger.write().await, "Failed to shut down scheduler: {}", e);
+                log_fatal!(ctx, "Failed to shut down scheduler: {}", e);
 
                 process::exit(1);
             }

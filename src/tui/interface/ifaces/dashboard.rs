@@ -14,8 +14,9 @@ use ratatui::{
 use crate::{
     context::Context,
     log_debug,
+    logger::Logger,
     logger::level::LogLevel,
-    server::{Server, types::latency::ServerLatency},
+    server::{Server, data::ServerStatus, types::latency::ServerLatency},
     tui::{
         action::TuiAction,
         interface::{
@@ -47,6 +48,7 @@ pub struct ServerTableSnapshow {
     pub id: String,
     pub latency_history: VecDeque<ServerLatency>,
     pub server: Server,
+    pub status: ServerStatus,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -102,10 +104,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
 
             // Handle selecting a server.
             KeyCode::Enter => {
-                log_debug!(
-                    ctx.logger.write().await,
-                    "Enter key pressed in dashboard interface"
-                );
+                log_debug!(ctx, "Enter key pressed in dashboard interface");
 
                 // Attempt to read servers list.
                 let servers = ctx.servers.read().await;
@@ -113,11 +112,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
                 // Retrieve the selected index, ensuring it is within bounds of the servers list.
                 let selected = self.interface.selected.min(servers.len().saturating_sub(1));
 
-                log_debug!(
-                    ctx.logger.write().await,
-                    "Selected server index: {}",
-                    selected
-                );
+                log_debug!(ctx, "Selected server index: {}", selected);
 
                 // Try to read the server context, if we can't, skip this server.
                 let srv_ctx = match servers.get(selected) {
@@ -126,7 +121,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
                 };
 
                 log_debug!(
-                    ctx.logger.write().await,
+                    ctx,
                     "Switching to server view interface for server ID: '{}'",
                     srv_ctx.id
                 );
@@ -197,7 +192,14 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
             }
 
             // Draw the server row.
-            draw_server_row(frame, rows[i], server, &latency_history, is_selected);
+            draw_server_row(
+                frame,
+                rows[i],
+                server,
+                srv_ss.status.clone(),
+                &latency_history,
+                is_selected,
+            );
         }
     }
 
@@ -211,11 +213,15 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
             for srv_ctx in servers.iter() {
                 let server = srv_ctx.server.read().await;
                 let latency_history = srv_ctx.latency.read().await;
+                let statuses = srv_ctx.statuses.read().await;
+
+                let status = srv_ctx.get_status(statuses.clone(), ctx.clone()).await;
 
                 snapshots.push(ServerTableSnapshow {
                     id: srv_ctx.id.clone(),
                     latency_history: latency_history.clone(),
                     server: server.clone(),
+                    status,
                 });
             }
 

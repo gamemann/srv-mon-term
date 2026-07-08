@@ -52,10 +52,9 @@ pub struct Args {
     #[arg(
         short = 'l',
         long = "log",
-        help = "Log levels to use (default: info,warn,error,fatal).",
-        default_value = "info,warn,error,fatal"
+        help = "Log levels to use (default: info,warn,error,fatal)."
     )]
-    pub log: String,
+    pub log_levels: Option<String>,
 
     #[arg(
         short = 'L',
@@ -63,6 +62,13 @@ pub struct Args {
         help = "Path to a log file to write logs to (default: logs/%Y-%m-%d.log)."
     )]
     pub log_path: Option<String>,
+
+    #[arg(
+        short = 'B',
+        long = "log-buffer-size",
+        help = "Overrides the maximum number of log messages to buffer in memory."
+    )]
+    pub log_max_buffer_size: Option<usize>,
 
     #[arg(
         short = 'b',
@@ -122,26 +128,40 @@ pub struct Args {
     )]
     pub isolate: bool,
 
+    // General TUI options.
+    #[arg(
+        short = 'i',
+        long = "draw-interval",
+        help = "The interval in milliseconds to redraw the TUI (default: 1000)."
+    )]
+    pub draw_interval: Option<u64>,
+
+    #[arg(
+        short = 'E',
+        long = "input-poll-interval",
+        help = "The interval in milliseconds to poll for input in the TUI (default: 1000)."
+    )]
+    pub input_poll_interval: Option<u64>,
+
     // Server store settings.
     #[arg(
-        short = 'A',
-        long = "add",
-        help = "Whether to add the server to the store."
+        short = 'S',
+        long = "save",
+        help = "Whether to add/save the server or data/settings to the store."
     )]
-    pub add: bool,
+    pub save: bool,
 
     #[arg(
         short = 'D',
         long = "delete",
-        help = "Whether to delete the server from the store."
+        help = "Whether to delete the server or data/settings from the store."
     )]
     pub delete: bool,
 }
 
 impl Args {
-    pub fn parse_log_levels(&self) -> Vec<LogLevel> {
-        let levels_str = self
-            .log
+    pub fn parse_log_levels(levels: String) -> Vec<LogLevel> {
+        let levels_str = levels
             .split(',')
             .map(|s| s.trim())
             .filter(|s| !s.is_empty());

@@ -39,11 +39,25 @@ In the future I plan on making it so you can do everything inside of the TUI, bu
 |---------|-------------| ------- |
 | `-s --store` | The storage type to use when persisting server settings. Currently, only `sqlite` is tested, but `json` will be supported in the future. | `sqlite` |
 | `--store-path` | The path to the store file without the file extension since that's determined off of the storage type. | `~/.config/srv-mon-term/store` |
-| `l --log` | The log levels to use. Separate multiple levels with a comma. Valid levels are `fatal`, `error`, `warn`, `info`, `debug`, and `trace`. | `info,warn,error,fatal` |
-| `-L --log-path` | When specified, all log messages will be written to the specified file as well. Data formats are available! For example: `./logs/%Y-%m-%d.log` | - |
 | `-b --basic` | Uses basic `stdout` messages instead of starting the TUI. Generally used for debugging or minimal output. | - |
 | `-v --version` | Displays the current version of the program. | - |
 | `-h --help` | Displays the help message. | - |
+
+### General Settings
+These are general settings that are stored in whatever store you specify. You can override these settings with command line arguments.
+
+#### Logging
+| Command | Description | Default |
+|---------|-------------| ------- |
+| `l --log` | The log levels to use. Separate multiple levels with a comma. Valid levels are `fatal`, `error`, `warn`, `info`, `debug`, and `trace`. | `info,warn,error,fatal` |
+| `-L --log-path` | When specified, all log messages will be written to the specified file as well. Data formats are available! For example: `./logs/%Y-%m-%d.log` | - |
+| `-B --log_max_buffer_size` | The maximum number of log messages to keep in the log buffer before popping out the last one. | `1000` |
+
+#### TUI
+| Command | Description | Default |
+|---------|-------------| ------- |
+| `-i --draw-interval` | The interval in milliseconds to redraw the TUI. | `500` |
+| `-E --input-poll-interval` | The interval in milliseconds to poll for user input. | `500` |
 
 ### Server Settings
 Here are general server settings for adding, deleting, or overriding server configurations.
@@ -56,8 +70,8 @@ Here are general server settings for adding, deleting, or overriding server conf
 | `-Q --query-port` | The port to use for the query. This is optional and will default to the port specified in `--dst` if not provided. |
 
 ##### Store Settings
-| `-A --add` | When set, adds the server to the store so it saves after the program exits. If this option is not set, the server will only be monitored for the current session. |
-| `-D --delete` | When set, deletes the server from the store so it will no longer be monitored after the program exits. |
+| `-S --save` | When set, adds or saves the server or setting to the store. This persists the server or setting for future sessions. |
+| `-D --delete` | When set, deletes the server or setting from the store so it will no longer be monitored after the program exits. |
 
 When deleting a server, **only** the destination address and port are required.
 

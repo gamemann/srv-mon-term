@@ -4,11 +4,13 @@ use anyhow::{Result, anyhow};
 
 use crate::store::{
     context::StoreCtx,
-    types::{Store, json::JsonStore, sqlite::SqliteStore},
+    json::{base::JsonStore, opts::StoreJsonOpts, state::StoreJsonState},
+    sqlite::{base::SqliteStore, opts::StoreSqliteOpts, state::StoreSqliteState},
+    types::Store,
 };
 
 impl Store {
-    fn fmt_store_path(store_path: String) -> String {
+    pub fn fmt_store_path(store_path: String) -> String {
         // Retrieve the home directory if possible.
         let home_dir = home_dir();
 
@@ -48,10 +50,18 @@ impl Store {
     }
 
     fn new_json(store_path: String) -> Self {
-        Store::Json(StoreCtx::new(JsonStore::new(store_path)))
+        Store::Json(StoreCtx::<JsonStore, StoreJsonState, StoreJsonOpts>::new(
+            StoreJsonOpts {
+                path: store_path.clone(),
+            },
+        ))
     }
 
     fn new_sqlite(store_path: String) -> Self {
-        Store::Sqlite(StoreCtx::new(SqliteStore::new(store_path)))
+        Store::Sqlite(
+            StoreCtx::<SqliteStore, StoreSqliteState, StoreSqliteOpts>::new(StoreSqliteOpts {
+                path: store_path.clone(),
+            }),
+        )
     }
 }

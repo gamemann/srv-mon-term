@@ -3,7 +3,10 @@ use std::collections::VecDeque;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::server::types::{Server, latency::ServerLatency, tasks::ServerTasks};
+use crate::server::{
+    data::ServerStatus,
+    types::{Server, latency::ServerLatency, tasks::ServerTasks},
+};
 
 use std::sync::Arc;
 
@@ -11,9 +14,31 @@ use anyhow::{Result, anyhow, bail};
 
 use crate::context::Context;
 
+#[derive(Debug, Clone)]
+pub struct ServerStatuses {
+    pub query_info: ServerStatus,
+    pub query_users: ServerStatus,
+    pub query_vars: ServerStatus,
+
+    pub latency: ServerStatus,
+}
+
+impl Default for ServerStatuses {
+    fn default() -> Self {
+        Self {
+            query_info: ServerStatus::default(),
+            query_users: ServerStatus::default(),
+            query_vars: ServerStatus::default(),
+
+            latency: ServerStatus::default(),
+        }
+    }
+}
+
 pub struct ServerCtx {
     pub id: String,
     pub server: RwLock<Server>,
+    pub statuses: RwLock<ServerStatuses>,
 
     pub tasks: RwLock<ServerTasks>,
     pub latency: RwLock<VecDeque<ServerLatency>>,
@@ -24,6 +49,7 @@ impl ServerCtx {
         Self {
             id: id.unwrap_or_else(|| Uuid::now_v7().to_string()),
             server: RwLock::new(Server::new(ip, port, port_query)),
+            statuses: RwLock::new(ServerStatuses::default()),
             tasks: RwLock::new(ServerTasks::default()),
             latency: RwLock::new(VecDeque::new()),
         }
@@ -48,6 +74,7 @@ impl ServerCtx {
         Ok(Self {
             id: Uuid::now_v7().to_string(),
             server: RwLock::new(Server::new(ip, port, None)),
+            statuses: RwLock::new(ServerStatuses::default()),
             tasks: RwLock::new(ServerTasks::default()),
             latency: RwLock::new(VecDeque::new()),
         })

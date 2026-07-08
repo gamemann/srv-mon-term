@@ -2,70 +2,70 @@ use anyhow::{Result, anyhow};
 
 use crate::{
     settings::Settings,
-    store::{context::StoreCtx, ext::StoreExt, server::ServerStore, types::json::JsonStore},
+    store::{
+        context::StoreCtx,
+        ext::StoreExt,
+        json::{opts::StoreJsonOpts, state::StoreJsonState},
+        server::ServerStore,
+    },
 };
 
-impl StoreExt for StoreCtx<JsonStore> {
+#[derive(Debug, Clone, Default)]
+pub struct JsonStore {}
+
+impl StoreExt for StoreCtx<JsonStore, StoreJsonState, StoreJsonOpts> {
     async fn init(&mut self) -> Result<()> {
         // We have no setup for JSON since we read/write from the file with a new handle each time (no need to manage file handles).
         Ok(())
     }
 
-    async fn settings_fetch(&mut self) -> Result<Settings> {
-        let mut store = self.store.lock().await;
-
+    async fn settings_fetch(&self) -> Result<Settings> {
         // Fetch current settings from the JSON store.
-        store.get_json().await?;
+        let data = self.get_state_data().await?;
 
-        Ok(store.store_fmt.settings.clone())
+        Ok(data.settings.clone())
     }
 
     async fn settings_save(&mut self, settings: &Settings) -> Result<()> {
-        let mut store = self.store.lock().await;
-
         // Update settings in the JSON store.
-        store.store_fmt.settings = settings.clone();
+        {
+            let mut state = self.state.write().await;
+
+            state.store.settings = settings.clone();
+        }
 
         // Simply save the entire store.
-        store.save_json().await
+        self.save_json().await
     }
 
-    async fn srv_fetch_by_id(&mut self, id: &str) -> Result<Option<ServerStore>> {
-        let store = self.store.lock().await;
+    async fn srv_fetch_by_id(&self, id: &str) -> Result<Option<ServerStore>> {
+        let data = self.get_state_data().await?;
 
-        Ok(store.store_fmt.servers.iter().find(|s| s.id == id).cloned())
+        Ok(data.servers.iter().find(|s| s.id == id).cloned())
     }
 
-    async fn srv_fetch_by_addr(&mut self, ip: &str, port: u16) -> Result<Option<ServerStore>> {
-        let store = self.store.lock().await;
+    async fn srv_fetch_by_addr(&self, ip: &str, port: u16) -> Result<Option<ServerStore>> {
+        let data = self.get_state_data().await?;
 
-        Ok(store
-            .store_fmt
+        Ok(data
             .servers
             .iter()
             .find(|s| s.ip == ip && s.port == port)
             .cloned())
     }
 
-    async fn srv_fetch_all(&mut self) -> Result<Vec<ServerStore>> {
-        let store = self.store.lock().await;
+    async fn srv_fetch_all(&self) -> Result<Vec<ServerStore>> {
+        let data = self.get_state_data().await?;
 
-        Ok(store.store_fmt.servers.clone())
+        Ok(data.servers.clone())
     }
 
     async fn srv_add(&mut self, server: &ServerStore) -> Result<()> {
         // Fetch current settings from the JSON store.
-        let mut store = self.store.lock().await;
-
-        store.get_json().await?;
-
-        println!(
-            "Adding server with ID {} and address {}:{}",
-            server.id, server.ip, server.port
-        );
+        let data = self.get_state_data().await?;
 
         // Check if a server with the same ID or IP/port already exists to prevent duplicates.
-        if store.store_fmt.servers.iter().any(|s| s.id == server.id) {
+        if data.servers.iter().any(|s| s.id == server.id) {
             return Err(anyhow!(
                 "Server with ID {} or address {}:{} already exists",
                 server.id,
@@ -75,21 +75,22 @@ impl StoreExt for StoreCtx<JsonStore> {
         }
 
         // Add a server to the JSON store.
-        store.store_fmt.servers.push(server.clone());
+        {
+            let mut state = self.state.write().await;
+
+            state.store.servers.push(server.clone());
+        }
 
         // Save the entire store after modification.
-        store.save_json().await
+        self.save_json().await
     }
 
     async fn srv_update(&mut self, server: &ServerStore) -> Result<()> {
         // Fetch current settings from the JSON store.
-        let mut store = self.store.lock().await;
-
-        store.get_json().await?;
+        let mut data = self.get_state_data().await?;
 
         // Update a server in the JSON store.
-        if let Some(existing) = store
-            .store_fmt
+        if let Some(existing) = data
             .servers
             .iter_mut()
             .find(|s| s.id == server.id || (s.ip == server.ip && s.port == server.port))
@@ -99,24 +100,28 @@ impl StoreExt for StoreCtx<JsonStore> {
             return Err(anyhow!("Server with ID {} not found for update", server.id));
         }
 
+        // Write state data.
+        {
+            let mut state = self.state.write().await;
+
+            state.store = data;
+        }
+
         // Save the entire store after modification.
-        store.save_json().await
+        self.save_json().await
     }
 
     async fn srv_delete(&mut self, server: &ServerStore) -> Result<()> {
         // Fetch current settings from the JSON store.
-        let mut store = self.store.lock().await;
-
-        store.get_json().await?;
+        let mut data = self.get_state_data().await?;
 
         // Delete a server by ID or IP/port from the JSON store.
-        if let Some(pos) = store
-            .store_fmt
+        if let Some(pos) = data
             .servers
             .iter()
             .position(|s| s.id == server.id || (s.ip == server.ip && s.port == server.port))
         {
-            store.store_fmt.servers.remove(pos);
+            data.servers.remove(pos);
         } else {
             return Err(anyhow!(
                 "Server with ID {} not found for deletion",
@@ -124,7 +129,14 @@ impl StoreExt for StoreCtx<JsonStore> {
             ));
         }
 
+        // Write state data.
+        {
+            let mut state = self.state.write().await;
+
+            state.store = data;
+        }
+
         // Save the entire store after modification.
-        store.save_json().await
+        self.save_json().await
     }
 }

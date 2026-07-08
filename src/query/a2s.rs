@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use a2s::{A2SClient, info::ServerType};
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use tokio::time::Instant;
 
 use crate::{
@@ -17,23 +17,23 @@ use crate::{
 
 use a2s::errors::Error as A2sError;
 
-fn parse_a2s_error(e: A2sError) -> Result<(ServerStatus, Option<u16>)> {
+fn parse_a2s_error(e: A2sError) -> ServerStatus {
     // Check for standard timeout indicating server is offline.
     if matches!(e, A2sError::ErrTimeout) {
-        return Ok((ServerStatus::Offline, None));
+        return ServerStatus::Offline;
     }
 
     let code = match e {
-        A2sError::Io(_) => Some(QueryA2sStatusCodes::IoError as u16),
-        A2sError::TryReserveError(_) => Some(QueryA2sStatusCodes::TryReserveError as u16),
-        A2sError::InvalidResponse => Some(QueryA2sStatusCodes::InvalidResponse as u16),
-        A2sError::MismatchID => Some(QueryA2sStatusCodes::MismatchId as u16),
-        A2sError::InvalidBz2Size => Some(QueryA2sStatusCodes::InvalidBz2Size as u16),
-        A2sError::CheckSumMismatch => Some(QueryA2sStatusCodes::ChecksumMismatch as u16),
-        _ => Some(QueryA2sStatusCodes::Other as u16),
+        A2sError::Io(_) => QueryA2sStatusCodes::IoError as u16,
+        A2sError::TryReserveError(_) => QueryA2sStatusCodes::TryReserveError as u16,
+        A2sError::InvalidResponse => QueryA2sStatusCodes::InvalidResponse as u16,
+        A2sError::MismatchID => QueryA2sStatusCodes::MismatchId as u16,
+        A2sError::InvalidBz2Size => QueryA2sStatusCodes::InvalidBz2Size as u16,
+        A2sError::CheckSumMismatch => QueryA2sStatusCodes::ChecksumMismatch as u16,
+        _ => QueryA2sStatusCodes::Other as u16,
     };
 
-    Ok((ServerStatus::Error, code))
+    ServerStatus::Error(code)
 }
 
 impl QueryExt for QueryA2sCtx {
@@ -66,15 +66,11 @@ impl QueryExt for QueryA2sCtx {
         // Query server info.
         let info = match self.cl.info(&addr).await {
             Ok(info) => info,
-            Err(e) => match parse_a2s_error(e) {
-                Ok(q) => {
-                    res.status = q.0;
-                    res.status_code = q.1;
+            Err(e) => {
+                res.status = parse_a2s_error(e);
 
-                    return Ok(res);
-                }
-                Err(e) => bail!("Failed to parse A2S error: {}", e),
-            },
+                return Ok(res);
+            }
         };
 
         // Update result with server data and return.
@@ -121,14 +117,11 @@ impl QueryExt for QueryA2sCtx {
         let start = Instant::now();
         let users = match self.cl.players(&addr).await {
             Ok(users) => users,
-            Err(e) => match parse_a2s_error(e) {
-                Ok(q) => {
-                    res.status = q.0;
-                    res.status_code = q.1;
-                    return Ok(res);
-                }
-                Err(e) => bail!("Failed to parse A2S error: {}", e),
-            },
+            Err(e) => {
+                res.status = parse_a2s_error(e);
+
+                return Ok(res);
+            }
         };
 
         let latency = start.elapsed().as_micros() as u64;
@@ -165,19 +158,21 @@ impl QueryExt for QueryA2sCtx {
 
         let vars = match self.cl.rules(&addr).await {
             Ok(vars) => vars,
-            Err(e) => match parse_a2s_error(e) {
-                Ok(q) => {
-                    res.status = q.0;
-                    res.status_code = q.1;
-                    return Ok(res);
-                }
-                Err(e) => bail!("Failed to parse A2S error: {}", e),
-            },
+            Err(e) => {
+                res.status = parse_a2s_error(e);
+
+                return Ok(res);
+            }
         };
 
         let latency = start.elapsed().as_micros() as u64;
 
         for var in vars {
+            // We need to make sure the key and values are not empty
+            if var.name.is_empty() || var.value.is_empty() {
+                continue;
+            }
+
             res.data.vars.push(var.into());
         }
 

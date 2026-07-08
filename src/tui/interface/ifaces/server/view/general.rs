@@ -8,7 +8,12 @@ use ratatui::{
 
 use crate::server::{Server, data::ServerStatus};
 
-pub fn draw_server_general(frame: &mut Frame<'_>, area: Rect, server: &Server) {
+pub fn draw_server_general(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    server: &Server,
+    status: ServerStatus,
+) {
     let data = &server.data;
 
     let block = Block::default()
@@ -30,9 +35,9 @@ pub fn draw_server_general(frame: &mut Frame<'_>, area: Rect, server: &Server) {
         .or_else(|| data.srv_name.clone())
         .unwrap_or_else(|| format!("{}:{}", server.ip, server.port));
 
-    let (status_text, status_color) = if data.status == ServerStatus::Online {
+    let (status_text, status_color) = if status == ServerStatus::Online {
         ("Online", Color::Green)
-    } else if data.status == ServerStatus::Error {
+    } else if let ServerStatus::Error(_) = status {
         ("Error", Color::Yellow)
     } else {
         ("Offline", Color::Red)

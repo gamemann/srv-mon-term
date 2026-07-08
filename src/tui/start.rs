@@ -8,6 +8,7 @@ use crate::context::Context;
 use crate::log_info;
 use crate::{log_error, tui::types::Tui};
 
+use crate::logger::Logger;
 use crate::logger::level::LogLevel;
 
 impl Tui {
@@ -22,20 +23,13 @@ impl Tui {
 
             loop {
                 if ctx.tui.draw_cancel_token.is_cancelled() {
-                    log_info!(
-                        ctx_job.logger.write().await,
-                        "TUI interface draw job cancelled, exiting loop"
-                    );
+                    log_info!(ctx, "TUI interface draw job cancelled, exiting loop");
 
                     break;
                 }
 
                 if let Err(e) = ctx.tui.draw(ctx.clone()).await {
-                    log_error!(
-                        ctx_job.logger.write().await,
-                        "Failed to start TUI interface draw job: {}",
-                        e
-                    );
+                    log_error!(ctx, "Failed to start TUI interface draw job: {}", e);
                 }
 
                 // Sleep for the configured interval before starting the next draw job.

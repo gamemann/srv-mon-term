@@ -15,7 +15,7 @@ use ratatui::{
 
 use crate::{
     context::Context,
-    logger::{buffer::LogBufferData, level::LogLevel},
+    logger::{Logger, buffer::LogBufferData, level::LogLevel},
     tui::{
         action::TuiAction,
         interface::{context::TuiInterfaceContext, ext::TuiInterfaceExt, types::TuiInterfaceType},
@@ -182,9 +182,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceLogs> {
             }));
         }
 
-        let logger = ctx.logger.read().await;
-
-        let buffer = match logger.buffer.try_read() {
+        let buffer = match ctx.logger.buffer.try_read() {
             Ok(buffer) => buffer.clone(),
             Err(_) => {
                 return Ok(None);

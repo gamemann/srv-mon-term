@@ -7,6 +7,7 @@ use tokio::sync::mpsc::{channel, error::TrySendError};
 use crate::{
     context::Context,
     log_error, log_trace,
+    logger::Logger,
     logger::level::LogLevel,
     tui::{
         action::TuiAction,
@@ -74,14 +75,14 @@ impl Tui {
                         {
                             Ok(_) => {
                                 log_trace!(
-                                    ctx.logger.write().await,
+                                    ctx,
                                     "Changed interface to {:?} due to interface action.",
                                     interface_type
                                 );
                             }
                             Err(e) => {
                                 log_error!(
-                                    ctx.logger.write().await,
+                                    ctx,
                                     "Failed to change interface to {:?} due to interface action: {}",
                                     interface_type,
                                     e
@@ -111,12 +112,12 @@ impl Tui {
                         // If we're not on Dashboard, switch to it.
                         if current_type == TuiInterfaceType::Dashboard {
                             log_trace!(
-                                ctx.logger.write().await,
+                                ctx,
                                 "Already on Dashboard interface, ignoring F1 input event."
                             );
                         } else {
                             log_trace!(
-                                ctx.logger.write().await,
+                                ctx,
                                 "Switching to Dashboard interface due to F1 input event."
                             );
 
@@ -127,13 +128,13 @@ impl Tui {
                             {
                                 Ok(_) => {
                                     log_trace!(
-                                        ctx.logger.write().await,
+                                        ctx,
                                         "Switched to Dashboard interface due to F1 input event."
                                     );
                                 }
                                 Err(e) => {
                                     log_error!(
-                                        ctx.logger.write().await,
+                                        ctx,
                                         "Failed to switch to Dashboard interface due to F1 input event: {}",
                                         e
                                     );
@@ -146,12 +147,12 @@ impl Tui {
                         // If we're not on Settings, switch to it.
                         if current_type == TuiInterfaceType::Settings {
                             log_trace!(
-                                ctx.logger.write().await,
+                                ctx,
                                 "Already on Settings interface, ignoring F2 input event."
                             );
                         } else {
                             log_trace!(
-                                ctx.logger.write().await,
+                                ctx,
                                 "Switching to Settings interface due to F2 input event."
                             );
 
@@ -162,13 +163,13 @@ impl Tui {
                             {
                                 Ok(_) => {
                                     log_trace!(
-                                        ctx.logger.write().await,
+                                        ctx,
                                         "Switched to Settings interface due to F2 input event."
                                     );
                                 }
                                 Err(e) => {
                                     log_error!(
-                                        ctx.logger.write().await,
+                                        ctx,
                                         "Failed to switch to Settings interface due to F2 input event: {}",
                                         e
                                     );
@@ -180,15 +181,9 @@ impl Tui {
                     event::KeyCode::F(3) => {
                         // If we're not on Logs, switch to it.
                         if current_type == TuiInterfaceType::Logs {
-                            log_trace!(
-                                ctx.logger.write().await,
-                                "Already on Logs interface, ignoring F3 input event."
-                            );
+                            log_trace!(ctx, "Already on Logs interface, ignoring F3 input event.");
                         } else {
-                            log_trace!(
-                                ctx.logger.write().await,
-                                "Switching to Logs interface due to F3 input event."
-                            );
+                            log_trace!(ctx, "Switching to Logs interface due to F3 input event.");
 
                             // Switch to Logs interface.
                             match ctx
@@ -198,13 +193,13 @@ impl Tui {
                             {
                                 Ok(_) => {
                                     log_trace!(
-                                        ctx.logger.write().await,
+                                        ctx,
                                         "Switched to Logs interface due to F3 input event."
                                     );
                                 }
                                 Err(e) => {
                                     log_error!(
-                                        ctx.logger.write().await,
+                                        ctx,
                                         "Failed to switch to Logs interface due to F3 input event: {}",
                                         e
                                     );
@@ -216,15 +211,9 @@ impl Tui {
                     event::KeyCode::F(4) => {
                         // If we're not on About, switch to it.
                         if current_type == TuiInterfaceType::About {
-                            log_trace!(
-                                ctx.logger.write().await,
-                                "Already on About interface, ignoring F4 input event."
-                            );
+                            log_trace!(ctx, "Already on About interface, ignoring F4 input event.");
                         } else {
-                            log_trace!(
-                                ctx.logger.write().await,
-                                "Switching to About interface due to F4 input event."
-                            );
+                            log_trace!(ctx, "Switching to About interface due to F4 input event.");
 
                             // Switch to About interface.
                             match ctx
@@ -234,13 +223,13 @@ impl Tui {
                             {
                                 Ok(_) => {
                                     log_trace!(
-                                        ctx.logger.write().await,
+                                        ctx,
                                         "Switched to About interface due to F4 input event."
                                     );
                                 }
                                 Err(e) => {
                                     log_error!(
-                                        ctx.logger.write().await,
+                                        ctx,
                                         "Failed to switch to About interface due to F4 input event: {}",
                                         e
                                     );

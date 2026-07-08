@@ -1,15 +1,19 @@
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
-pub struct StoreCtx<T> {
-    pub store: Arc<Mutex<T>>,
+pub struct StoreCtx<T, S, O> {
+    pub store: Arc<RwLock<T>>,
+    pub state: Arc<RwLock<S>>,
+    pub opts: O,
 }
 
-impl<T> StoreCtx<T> {
-    pub fn new(store: T) -> Self {
+impl<T: Default, S: Default, O> StoreCtx<T, S, O> {
+    pub fn new(opts: O) -> Self {
         StoreCtx {
-            store: Arc::new(Mutex::new(store)),
+            store: Arc::new(RwLock::new(T::default())),
+            state: Arc::new(RwLock::new(S::default())),
+            opts,
         }
     }
 }

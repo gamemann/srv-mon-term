@@ -3,6 +3,7 @@ use anyhow::{Result, anyhow, bail};
 use crate::cli::QueryMonitor;
 use crate::context::Context;
 use crate::log_debug;
+use crate::logger::Logger;
 use crate::logger::level::LogLevel;
 use crate::query::ext::QueryExt;
 use crate::query::types::Query;
@@ -35,11 +36,21 @@ impl ServerCtx {
             (tag, server.data.clone(), users_len, vars_len)
         };
 
+        let status = {
+            let statuses = self.statuses.read().await;
+
+            match query_monitor {
+                QueryMonitor::Info => statuses.query_info.clone(),
+                QueryMonitor::Users => statuses.query_users.clone(),
+                QueryMonitor::Vars => statuses.query_vars.clone(),
+            }
+        };
+
         let mut content = String::new();
 
         content.push_str(&format!("{}: ", tag));
 
-        match data.status {
+        match status {
             ServerStatus::Online => {
                 content.push_str(&format!("Reply in {:.2}ms. ", latency));
 
@@ -99,13 +110,11 @@ impl ServerCtx {
             ServerStatus::Offline => {
                 content.push_str("Offline");
             }
-            ServerStatus::Error => {
-                let err_code = data
-                    .status_code
-                    .map(|c| c.to_string())
-                    .unwrap_or("N/A".to_string());
-
-                content.push_str(&format!("Error => {}. ", err_code));
+            ServerStatus::Error(code) => {
+                content.push_str(&format!("Error => {}. ", code));
+            }
+            ServerStatus::Unknown => {
+                content.push_str("Unknown");
             }
         }
 
@@ -138,7 +147,7 @@ impl ServerCtx {
         // Format tag.
         let tag = format!("{} ({}:{})", addr, query_type, query_monitor.to_str());
 
-        log_debug!(ctx.logger.write().await, "{}: Querying server info...", tag,);
+        log_debug!(ctx, "{}: Querying server info...", tag,);
 
         let monitor_only = args.use_query_monitor_only;
 
@@ -148,7 +157,7 @@ impl ServerCtx {
 
             if monitor_only && !is_query_type {
                 log_debug!(
-                    ctx.logger.write().await,
+                    ctx,
                     "{}: Skipping info query due to --monitor-only flag...",
                     tag
                 );
@@ -159,12 +168,7 @@ impl ServerCtx {
             // Create the query.
             let mut query = match Query::from_srv_type(&query_type).await {
                 Ok(q) => {
-                    log_debug!(
-                        ctx.logger.write().await,
-                        "{}: [INFO] Created query '{}'...",
-                        tag,
-                        query_type
-                    );
+                    log_debug!(ctx, "{}: [INFO] Created query '{}'...", tag, query_type);
 
                     q
                 }
@@ -173,43 +177,22 @@ impl ServerCtx {
 
             let latency = {
                 let res = match query.query_info(&ip, port, timeout).await {
-                    Ok(res) => res,
+                    Ok(res) => {
+                        // Update query info status.
+                        let mut statuses = self.statuses.write().await;
+                        statuses.query_info = res.status.clone();
+
+                        res
+                    }
                     Err(e) => bail!("Failed to query info: {}", e),
                 };
 
-                // Start writing to server data.
                 {
                     let mut server = self.server.write().await;
 
                     let data = &mut server.data;
 
-                    let is_query_monitor = monitor_only && is_query_type;
-
-                    if res.status != ServerStatus::Online && (!monitor_only || is_query_monitor) {
-                        log_debug!(
-                            ctx.logger.write().await,
-                            "{}: Setting server status to {}...",
-                            tag,
-                            res.status
-                        );
-
-                        data.status_code = res.status_code.clone();
-                        data.status = res.status.clone();
-                    } else {
-                        if data.status != ServerStatus::Online
-                            && (!monitor_only || is_query_monitor)
-                        {
-                            log_debug!(
-                                ctx.logger.write().await,
-                                "{}: Setting server status to {}...",
-                                tag,
-                                res.status
-                            );
-
-                            data.status_code = res.status_code.clone();
-                            data.status = res.status.clone();
-                        }
-
+                    if res.status == ServerStatus::Online {
                         data.srv_name = res.data.srv_name.clone();
                         data.map_name = res.data.map_name.clone();
                         data.game_name = res.data.game_name.clone();
@@ -229,6 +212,8 @@ impl ServerCtx {
                 res.latency
             };
 
+            let latency_ms = latency as f64 / 1000.0;
+
             // Retrieve server info from info query.
             let (latency_type, status, users_cur, users_max, map_name) = {
                 let server = self.server.read().await;
@@ -237,9 +222,11 @@ impl ServerCtx {
                 let users_max = server.data.users_max;
                 let map_name = server.data.map_name.clone();
 
+                let status = self.statuses.read().await.query_info.clone();
+
                 (
                     server.latency_type.clone(),
-                    server.data.status.clone(),
+                    status.clone(),
                     users_cur,
                     users_max,
                     map_name,
@@ -249,14 +236,15 @@ impl ServerCtx {
             // If our server's query latency type is self info, we'll want to set the latency to the info query time.
             if latency_type == ServerLatencyType::SelfInfo {
                 log_debug!(
-                    ctx.logger.write().await,
-                    "{}: Setting latency to info query latency of {}ms... Server status: {}",
+                    ctx,
+                    "{}: Setting latency to info query latency of {}ms... Status: {}",
                     tag,
                     query_monitor.to_str(),
-                    latency
+                    latency_ms
                 );
 
-                self.add_latency(ctx.clone(), latency).await?;
+                self.add_latency(ctx.clone(), status.clone(), latency)
+                    .await?;
             }
 
             Ok((latency, status, users_cur, users_max, map_name))
@@ -268,7 +256,7 @@ impl ServerCtx {
 
             if monitor_only && !is_query_type {
                 log_debug!(
-                    ctx.logger.write().await,
+                    ctx,
                     "{}: Skipping users query due to --monitor-only flag...",
                     tag
                 );
@@ -279,45 +267,24 @@ impl ServerCtx {
             // Create the query.
             let mut query = match Query::from_srv_type(&query_type).await {
                 Ok(q) => {
-                    log_debug!(
-                        ctx.logger.write().await,
-                        "{}: [USERS] Created query '{}'...",
-                        tag,
-                        query_type
-                    );
+                    log_debug!(ctx, "{}: [USERS] Created query '{}'...", tag, query_type);
 
                     q
                 }
                 Err(e) => bail!("Failed to create query: {}", e),
             };
 
-            let (latency, latency_type, users_count) = {
+            let (latency, latency_type, users_count, status) = {
                 let res = match query.query_users(&ip, port, timeout).await {
-                    Ok(q) => q,
+                    Ok(res) => {
+                        // Update query users status.
+                        let mut statuses = self.statuses.write().await;
+                        statuses.query_users = res.status.clone();
+
+                        res
+                    }
                     Err(e) => bail!("Failed to query server users: {}", e),
                 };
-
-                let check_offline = monitor_only && is_query_type;
-
-                if res.data.users.len() > 0 || check_offline {
-                    let mut server = self.server.write().await;
-
-                    let data = &mut server.data;
-
-                    if res.status != ServerStatus::Online && check_offline {
-                        log_debug!(
-                            ctx.logger.write().await,
-                            "{}: Setting server status to {}...",
-                            tag,
-                            res.status
-                        );
-
-                        data.status_code = res.status_code.clone();
-                        data.status = res.status.clone();
-                    } else {
-                        data.users = res.data.users.clone();
-                    }
-                }
 
                 let latency_type = {
                     let server = self.server.read().await;
@@ -325,25 +292,36 @@ impl ServerCtx {
                     server.latency_type.clone()
                 };
 
-                (res.latency, latency_type, res.data.users.len())
+                // If the status is successful, update the users.
+                if res.status == ServerStatus::Online {
+                    let mut server = self.server.write().await;
+
+                    let data = &mut server.data;
+
+                    data.users = res.data.users.clone();
+                }
+
+                (
+                    res.latency,
+                    latency_type,
+                    res.data.users.len(),
+                    res.status.clone(),
+                )
             };
 
-            log_debug!(
-                ctx.logger.write().await,
-                "{}: Queried server users in {}ms...",
-                tag,
-                latency
-            );
+            let latency_ms = latency as f64 / 1000.0;
+
+            log_debug!(ctx, "{}: Queried server users in {}ms...", tag, latency_ms);
 
             if latency_type == ServerLatencyType::SelfUsers {
                 log_debug!(
-                    ctx.logger.write().await,
+                    ctx,
                     "{}: Setting latency to users query latency of {}ms...",
                     tag,
-                    latency
+                    latency_ms
                 );
 
-                self.add_latency(ctx.clone(), latency).await?;
+                self.add_latency(ctx.clone(), status, latency).await?;
             }
 
             Ok((latency, users_count))
@@ -355,7 +333,7 @@ impl ServerCtx {
 
             if monitor_only && !is_query_type {
                 log_debug!(
-                    ctx.logger.write().await,
+                    ctx,
                     "{}: Skipping vars query due to --monitor-only flag...",
                     tag
                 );
@@ -366,19 +344,14 @@ impl ServerCtx {
             // Create the query.
             let mut query = match Query::from_srv_type(&query_type).await {
                 Ok(q) => {
-                    log_debug!(
-                        ctx.logger.write().await,
-                        "{}: [VARS] Created query '{}'...",
-                        tag,
-                        query_type
-                    );
+                    log_debug!(ctx, "{}: [VARS] Created query '{}'...", tag, query_type);
 
                     q
                 }
                 Err(e) => bail!("Failed to create query: {}", e),
             };
 
-            let (latency, latency_type, vars_count) = {
+            let (latency, latency_type, vars_count, status) = {
                 let res = match query.query_vars(&ip, port, timeout).await {
                     Ok(q) => q,
                     Err(e) => bail!("Failed to query server vars: {}", e),
@@ -391,17 +364,8 @@ impl ServerCtx {
 
                     let data = &mut server.data;
 
-                    if res.status != ServerStatus::Online && check_offline {
-                        log_debug!(
-                            ctx.logger.write().await,
-                            "{}: Setting server status to {}...",
-                            tag,
-                            res.status
-                        );
-
-                        data.status_code = res.status_code.clone();
-                        data.status = res.status.clone();
-                    } else {
+                    // Update vars if the query was successful.
+                    if res.status == ServerStatus::Online {
                         data.vars = res.data.vars.clone();
                     }
                 }
@@ -412,25 +376,27 @@ impl ServerCtx {
                     server.latency_type.clone()
                 };
 
-                (res.latency, latency_type, res.data.vars.len() as u32)
+                (
+                    res.latency,
+                    latency_type,
+                    res.data.vars.len() as u32,
+                    res.status.clone(),
+                )
             };
 
-            log_debug!(
-                ctx.logger.write().await,
-                "{}: Queried server vars in {}ms...",
-                tag,
-                latency
-            );
+            let latency_ms = latency as f64 / 1000.0;
+
+            log_debug!(ctx, "{}: Queried server vars in {}ms...", tag, latency_ms);
 
             if latency_type == ServerLatencyType::SelfVars {
                 log_debug!(
-                    ctx.logger.write().await,
+                    ctx,
                     "{}: Setting latency to vars query latency of {}ms...",
                     tag,
-                    latency
+                    latency_ms
                 );
 
-                self.add_latency(ctx.clone(), latency).await?;
+                self.add_latency(ctx.clone(), status, latency).await?;
             }
 
             Ok((latency, vars_count))

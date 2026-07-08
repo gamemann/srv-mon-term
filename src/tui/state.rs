@@ -3,6 +3,7 @@ use anyhow::{Result, bail};
 use crate::{
     context::Context,
     log_debug,
+    logger::Logger,
     logger::level::LogLevel,
     tui::{
         interface::{base::TuiInterface, new::TuiInterfaceOpts, types::TuiInterfaceType},
@@ -26,10 +27,7 @@ impl Tui {
                 // First, cleanup the current interface.
                 match state.interface.cleanup(ctx.clone()).await {
                     Ok(_) => {
-                        log_debug!(
-                            ctx.logger.write().await,
-                            "Successfully cleaned up current interface"
-                        );
+                        log_debug!(ctx, "Successfully cleaned up current interface");
                     }
                     Err(e) => bail!("Failed to cleanup current interface: {}", e),
                 }
@@ -40,10 +38,7 @@ impl Tui {
                 // Then, prepare the new interface.
                 match state.interface.prepare(ctx.clone()).await {
                     Ok(_) => {
-                        log_debug!(
-                            ctx.logger.write().await,
-                            "Successfully prepared new interface"
-                        );
+                        log_debug!(ctx, "Successfully prepared new interface");
                     }
                     Err(e) => bail!("Failed to prepare new interface: {}", e),
                 }

@@ -1,6 +1,9 @@
 use anyhow::{Result, anyhow};
 
-use crate::store::types::sqlite::SqliteStore;
+use crate::store::{
+    StoreCtx,
+    sqlite::{base::SqliteStore, opts::StoreSqliteOpts, state::StoreSqliteState},
+};
 
 pub const TABLE_SETTINGS: &str = "CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -24,14 +27,19 @@ pub const TABLE_SERVER: &str = "CREATE TABLE IF NOT EXISTS servers (
     UNIQUE(ip, port)
 )";
 
-impl SqliteStore {
+impl StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
     pub async fn create_tables(&self) -> Result<()> {
-        if let Some(conn) = &self.conn {
-            conn.execute(TABLE_SETTINGS, [])
-                .map_err(|e| anyhow!("Failed to create settings table: {}", e))?;
-            conn.execute(TABLE_SERVER, [])
-                .map_err(|e| anyhow!("Failed to create servers table: {}", e))?;
-        }
+        let conn = self.get_conn_lock().await?;
+
+        let conn = conn
+            .lock()
+            .map_err(|e| anyhow!("Failed to acquire lock on SQLite connection: {}", e))?;
+
+        conn.execute(TABLE_SETTINGS, [])
+            .map_err(|e| anyhow!("Failed to create settings table: {}", e))?;
+        conn.execute(TABLE_SERVER, [])
+            .map_err(|e| anyhow!("Failed to create servers table: {}", e))?;
+
         Ok(())
     }
 }

@@ -2,9 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{settings::Settings, store::server::ServerStore};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct JsonStoreFormat {
-    pub settings: Settings,
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct JsonStateData {
     pub servers: Vec<ServerStore>,
+    pub settings: Settings,
 }

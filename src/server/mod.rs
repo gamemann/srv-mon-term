@@ -4,6 +4,7 @@ pub mod context;
 pub mod latency;
 pub mod query;
 pub mod setup;
+pub mod status;
 pub mod tasks;
 pub mod types;
 

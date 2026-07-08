@@ -14,7 +14,19 @@ pub fn draw_server_users(
     users: &[ServerUser],
     selected: usize,
     focused: bool,
+    is_error: bool,
+    err_code: Option<u16>,
 ) {
+    if is_error {
+        let err = Paragraph::new(Span::styled(
+            format!("Error fetching users list. Code: {:?}", err_code),
+            Style::default().fg(Color::Red),
+        ));
+
+        frame.render_widget(err, area);
+
+        return;
+    }
     let border_color = if focused {
         Color::Yellow
     } else {
@@ -42,6 +54,7 @@ pub fn draw_server_users(
             )),
             inner,
         );
+
         return;
     }
 

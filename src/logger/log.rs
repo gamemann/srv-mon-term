@@ -3,30 +3,84 @@ use tokio::fs;
 
 use anyhow::{Result, anyhow};
 
-use crate::logger::{
-    buffer::LogBufferData,
-    types::{Logger, level::LogLevel},
+use crate::{
+    context::Context,
+    logger::{
+        buffer::LogBufferData,
+        types::{Logger, level::LogLevel},
+    },
 };
 
 use tokio::io::AsyncWriteExt;
 
 impl Logger {
-    pub async fn log_msg(&mut self, level: LogLevel, msg: String) -> Result<()> {
-        if !self.levels.contains(&level) {
+    pub async fn log_msg(ctx: Context, level: LogLevel, msg: String) -> Result<()> {
+        let (cfg_levels, is_basic, path) = {
+            let settings = ctx.settings.read().await;
+            let args = &ctx.args;
+
+            (
+                &settings.log_levels.clone(),
+                &args.basic,
+                &settings.log_path.clone(),
+            )
+        };
+
+        if !cfg_levels.contains(&level) {
+            return Ok(());
+        }
+
+        let max_buffer_size = ctx.settings.read().await.log_max_buffer_size;
+
+        ctx.logger
+            .log_msg_raw(level, msg, cfg_levels, path, is_basic, max_buffer_size)
+            .await
+    }
+
+    pub async fn log_internal(&self, level: LogLevel, msg: &str) {
+        self.log_msg_raw(
+            level,
+            msg.to_string(),
+            &self.levels,
+            &self.path,
+            &self.is_basic,
+            self.max_buffer_size,
+        )
+        .await
+        .ok();
+    }
+
+    async fn log_msg_raw(
+        &self,
+        level: LogLevel,
+        msg: String,
+        levels: &Vec<LogLevel>,
+        path: &Option<String>,
+        is_basic: &bool,
+        max_buffer_size: usize,
+    ) -> Result<()> {
+        if !levels.contains(&level) {
             return Ok(());
         }
 
         let msg_base = format!("[{}] {}", level.to_string().to_uppercase(), msg);
 
         // Print the base message to the terminal if basic mode is enabled. Otherwise, push to buffer to display in the TUI.
-        if self.is_basic {
-            println!("{}", msg_base.clone());
+        if *is_basic {
+            println!("{}", msg_base);
         } else {
             // Acquire write lock from buffer and push log message.
-            let mut buffer = self.buffer.write().unwrap();
+            let mut buffer = match self.buffer.try_write() {
+                Ok(guard) => guard,
+                Err(_) => {
+                    return Err(anyhow!(
+                        "Failed to acquire write lock for log buffer. Another thread may be holding the lock."
+                    ));
+                }
+            };
 
             // Check if the buffer is full before pushing a new message. If it is, pop the oldest message to make room for the new one.
-            if buffer.len() >= self.max_buffer_size {
+            if buffer.len() >= max_buffer_size {
                 buffer.pop_front();
             }
 
@@ -36,7 +90,7 @@ impl Logger {
             buffer.push_back(buff_data);
         }
 
-        if let Some(path_fmt) = &self.path {
+        if let Some(path_fmt) = &path {
             // First let's format the path with the current date and time if any.
             let now = chrono::Local::now();
 

@@ -7,7 +7,6 @@ use crate::server::{
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct QueryResponse<T> {
     pub status: ServerStatus,
-    pub status_code: Option<u16>,
 
     pub latency: u64,
     pub data: T,
@@ -20,7 +19,6 @@ where
     fn default() -> Self {
         Self {
             status: ServerStatus::Offline,
-            status_code: None,
             latency: 0,
             data: T::default(),
         }

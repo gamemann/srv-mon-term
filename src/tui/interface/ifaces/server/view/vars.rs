@@ -14,8 +14,25 @@ pub fn draw_server_vars(
     vars: &[ServerVar],
     selected: usize,
     focused: bool,
+    is_error: bool,
+    err_code: Option<u16>,
 ) {
-    let border_color = if focused { Color::Yellow } else { Color::DarkGray };
+    if is_error {
+        let err = Paragraph::new(Span::styled(
+            format!("Error fetching vars list. Code: {:?}", err_code),
+            Style::default().fg(Color::Red),
+        ));
+
+        frame.render_widget(err, area);
+
+        return;
+    }
+
+    let border_color = if focused {
+        Color::Yellow
+    } else {
+        Color::DarkGray
+    };
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -45,12 +62,20 @@ pub fn draw_server_vars(
     let mut sorted: Vec<&ServerVar> = vars.iter().collect();
     sorted.sort_by(|a, b| a.name.cmp(&b.name));
 
-    let header = Row::new(vec![Cell::from("Name"), Cell::from("Value")])
-        .style(Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD));
+    let header = Row::new(vec![Cell::from("Name"), Cell::from("Value")]).style(
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::BOLD),
+    );
 
     let rows: Vec<Row> = sorted
         .iter()
-        .map(|v| Row::new(vec![Cell::from(v.name.clone()), Cell::from(v.value.clone())]))
+        .map(|v| {
+            Row::new(vec![
+                Cell::from(v.name.clone()),
+                Cell::from(v.value.clone()),
+            ])
+        })
         .collect();
 
     let widths = [Constraint::Percentage(45), Constraint::Percentage(55)];

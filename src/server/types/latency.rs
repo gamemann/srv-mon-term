@@ -10,6 +10,7 @@ pub enum ServerLatencyType {
     A2sInfo,
     A2sPlayers,
     A2sRules,
+
     Icmp,
 }
 
@@ -60,6 +61,7 @@ impl From<i32> for ServerLatencyType {
             4 => ServerLatencyType::A2sPlayers,
             5 => ServerLatencyType::A2sRules,
             6 => ServerLatencyType::Icmp,
+
             _ => ServerLatencyType::SelfInfo,
         }
     }

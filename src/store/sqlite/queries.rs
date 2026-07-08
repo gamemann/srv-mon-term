@@ -5,7 +5,7 @@ pub const SQL_SETTINGS_SAVE: &str = "INSERT INTO settings (key, value) VALUES (?
 
 pub const SQL_SRV_FETCH_BY_ID: &str = "SELECT ip, port, display_name, port_query, query_interval, query_timeout, query_type, latency_interval, latency_timeout, latency_type, latency_history_size FROM servers WHERE id = ?1";
 
-pub const SQL_SRV_FETCH_BY_ADDR: &str = "SELECT id, ip, port, port_query, display_name, query_interval, query_timeout, query_type, latency_interval, latency_timeout, latency_type, latency_history_size FROM servers WHERE ip = ?1 AND port = ?2";
+pub const SQL_SRV_FETCH_BY_ADDR: &str = "SELECT id, port_query, display_name, query_interval, query_timeout, query_type, latency_interval, latency_timeout, latency_type, latency_history_size FROM servers WHERE ip = ?1 AND port = ?2";
 
 pub const SQL_SRV_FETCH_ALL: &str = "SELECT id, ip, port, port_query, display_name, query_interval, query_timeout, query_type, latency_interval, latency_timeout, latency_type, latency_history_size FROM servers";
 

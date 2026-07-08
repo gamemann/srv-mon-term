@@ -9,12 +9,12 @@ use crate::{
 pub trait StoreExt {
     async fn init(&mut self) -> Result<()>;
 
-    async fn settings_fetch(&mut self) -> Result<Settings>;
+    async fn settings_fetch(&self) -> Result<Settings>;
     async fn settings_save(&mut self, settings: &Settings) -> Result<()>;
 
-    async fn srv_fetch_by_id(&mut self, id: &str) -> Result<Option<ServerStore>>;
-    async fn srv_fetch_by_addr(&mut self, ip: &str, port: u16) -> Result<Option<ServerStore>>;
-    async fn srv_fetch_all(&mut self) -> Result<Vec<ServerStore>>;
+    async fn srv_fetch_by_id(&self, id: &str) -> Result<Option<ServerStore>>;
+    async fn srv_fetch_by_addr(&self, ip: &str, port: u16) -> Result<Option<ServerStore>>;
+    async fn srv_fetch_all(&self) -> Result<Vec<ServerStore>>;
 
     async fn srv_add(&mut self, server: &ServerStore) -> Result<()>;
     async fn srv_update(&mut self, server: &ServerStore) -> Result<()>;
@@ -29,7 +29,7 @@ impl StoreExt for Store {
         }
     }
 
-    async fn settings_fetch(&mut self) -> Result<Settings> {
+    async fn settings_fetch(&self) -> Result<Settings> {
         match self {
             Store::Json(store_ctx) => store_ctx.settings_fetch().await,
             Store::Sqlite(store_ctx) => store_ctx.settings_fetch().await,
@@ -43,21 +43,21 @@ impl StoreExt for Store {
         }
     }
 
-    async fn srv_fetch_by_id(&mut self, id: &str) -> Result<Option<ServerStore>> {
+    async fn srv_fetch_by_id(&self, id: &str) -> Result<Option<ServerStore>> {
         match self {
             Store::Json(store_ctx) => store_ctx.srv_fetch_by_id(id).await,
             Store::Sqlite(store_ctx) => store_ctx.srv_fetch_by_id(id).await,
         }
     }
 
-    async fn srv_fetch_by_addr(&mut self, ip: &str, port: u16) -> Result<Option<ServerStore>> {
+    async fn srv_fetch_by_addr(&self, ip: &str, port: u16) -> Result<Option<ServerStore>> {
         match self {
             Store::Json(store_ctx) => store_ctx.srv_fetch_by_addr(ip, port).await,
             Store::Sqlite(store_ctx) => store_ctx.srv_fetch_by_addr(ip, port).await,
         }
     }
 
-    async fn srv_fetch_all(&mut self) -> Result<Vec<ServerStore>> {
+    async fn srv_fetch_all(&self) -> Result<Vec<ServerStore>> {
         match self {
             Store::Json(store_ctx) => store_ctx.srv_fetch_all().await,
             Store::Sqlite(store_ctx) => store_ctx.srv_fetch_all().await,
