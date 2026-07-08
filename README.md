@@ -70,13 +70,15 @@ Here are general server settings for adding, deleting, or overriding server conf
 | `-Q --query-port` | The port to use for the query. This is optional and will default to the port specified in `--dst` if not provided. |
 
 ##### Store Settings
+| Command | Description |
+|---------|-------------|
 | `-S --save` | When set, adds or saves the server or setting to the store. This persists the server or setting for future sessions. |
 | `-D --delete` | When set, deletes the server or setting from the store so it will no longer be monitored after the program exits. |
 
 When deleting a server, **only** the destination address and port are required.
 
 #### Overrides
-You can specificy specific overrides for a server when adding it to the store. These overrides will be saved and used whenever the server is monitored in the future.
+You can specify overrides for a server when adding it to the store. These overrides will be saved and used whenever the server is monitored in the future.
 
 | Command | Description |
 |---------|-------------|
@@ -89,4 +91,4 @@ You can change how the program monitors servers with the following commands.
 |---------|-------------|
 | `--query-monitor -M` | When set, will only monitor this specific query from the server. The values for this are `info`, `users`, and `vars`. If this option is not set, the program will monitor all queries. |
 | `-m --monitor-only` | When set, will only monitor the server query specified above. |
-| `-I --isolate` | When set, will only monitor the server specified through the comamnd line. 
+| `-I --isolate` | When set, will only monitor the server specified through the command line. 
