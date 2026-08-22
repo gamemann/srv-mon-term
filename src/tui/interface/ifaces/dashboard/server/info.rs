@@ -50,11 +50,16 @@ pub fn draw_server_info(frame: &mut Frame<'_>, area: Rect, server: &Server, is_o
     );
 
     let addr_span = Span::styled(
-        format!("  {}:{}", server.ip, server.port),
+        format!("  {}", server.to_addr()),
         Style::default().fg(Color::DarkGray),
     );
 
-    let line2 = Line::from(vec![Span::raw("  "), player_span, addr_span]);
+    let query_span = Span::styled(
+        format!("  [{}]", server.query_type),
+        Style::default().fg(Color::DarkGray),
+    );
+
+    let line2 = Line::from(vec![Span::raw("  "), player_span, addr_span, query_span]);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)

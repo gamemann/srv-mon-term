@@ -18,7 +18,7 @@ impl Tui {
         ];
 
         let mut spans = vec![Span::styled(
-            " srv-mon  ",
+            " gmon  ",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),

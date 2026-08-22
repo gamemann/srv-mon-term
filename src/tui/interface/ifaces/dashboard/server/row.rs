@@ -24,7 +24,6 @@ pub fn draw_server_row(
     latency_history: &VecDeque<ServerLatency>,
     is_selected: bool,
 ) {
-    let data = &server.data;
     // Border color: yellow when selected, green/red based on status otherwise.
     let border_color = if is_selected {
         Color::Yellow

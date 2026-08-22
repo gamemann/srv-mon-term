@@ -150,63 +150,63 @@ impl TuiInterfaceExt for TuiInterface {
                 frame,
                 area,
                 ctx,
-                draw_data.map(|data| match data {
-                    TuiInterfaceDrawData::Dashboard(data) => data,
-                    _ => panic!("Expected Dashboard draw data"),
+                draw_data.and_then(|data| match data {
+                    TuiInterfaceDrawData::Dashboard(data) => Some(data),
+                    _ => None,
                 }),
             ),
             TuiInterface::Logs(ictx) => ictx.draw(
                 frame,
                 area,
                 ctx,
-                draw_data.map(|data| match data {
-                    TuiInterfaceDrawData::Logs(data) => data,
-                    _ => panic!("Expected Logs draw data"),
+                draw_data.and_then(|data| match data {
+                    TuiInterfaceDrawData::Logs(data) => Some(data),
+                    _ => None,
                 }),
             ),
             TuiInterface::Settings(ictx) => ictx.draw(
                 frame,
                 area,
                 ctx,
-                draw_data.map(|data| match data {
-                    TuiInterfaceDrawData::Settings(data) => data,
-                    _ => panic!("Expected Settings draw data"),
+                draw_data.and_then(|data| match data {
+                    TuiInterfaceDrawData::Settings(data) => Some(data),
+                    _ => None,
                 }),
             ),
             TuiInterface::About(ictx) => ictx.draw(
                 frame,
                 area,
                 ctx,
-                draw_data.map(|data| match data {
-                    TuiInterfaceDrawData::About(data) => data,
-                    _ => panic!("Expected About draw data"),
+                draw_data.and_then(|data| match data {
+                    TuiInterfaceDrawData::About(data) => Some(data),
+                    _ => None,
                 }),
             ),
             TuiInterface::ServerView(ictx) => ictx.draw(
                 frame,
                 area,
                 ctx,
-                draw_data.map(|data| match data {
-                    TuiInterfaceDrawData::ServerView(data) => data,
-                    _ => panic!("Expected ServerView draw data"),
+                draw_data.and_then(|data| match data {
+                    TuiInterfaceDrawData::ServerView(data) => Some(data),
+                    _ => None,
                 }),
             ),
             TuiInterface::ServerNew(ictx) => ictx.draw(
                 frame,
                 area,
                 ctx,
-                draw_data.map(|data| match data {
-                    TuiInterfaceDrawData::ServerNew(data) => data,
-                    _ => panic!("Expected ServerNew draw data"),
+                draw_data.and_then(|data| match data {
+                    TuiInterfaceDrawData::ServerNew(data) => Some(data),
+                    _ => None,
                 }),
             ),
             TuiInterface::ServerSettings(ictx) => ictx.draw(
                 frame,
                 area,
                 ctx,
-                draw_data.map(|data| match data {
-                    TuiInterfaceDrawData::ServerSettings(data) => data,
-                    _ => panic!("Expected ServerSettings draw data"),
+                draw_data.and_then(|data| match data {
+                    TuiInterfaceDrawData::ServerSettings(data) => Some(data),
+                    _ => None,
                 }),
             ),
         }

@@ -62,12 +62,24 @@ pub fn draw_server_users(
     let mut sorted: Vec<&ServerUser> = users.iter().collect();
     sorted.sort_by(|a, b| b.score.cmp(&a.score));
 
-    let header = Row::new(vec![
-        Cell::from("Name"),
-        Cell::from("Score"),
-        Cell::from("Time"),
-    ])
-    .style(
+    // Not every protocol reports a ping or a connection time, so only show what we have.
+    let has_ping = sorted.iter().any(|u| u.ping.is_some());
+    let has_duration = sorted.iter().any(|u| u.duration > 0);
+
+    let mut header_cells = vec![Cell::from("Name"), Cell::from("Score")];
+    let mut widths = vec![Constraint::Min(12), Constraint::Length(7)];
+
+    if has_ping {
+        header_cells.push(Cell::from("Ping"));
+        widths.push(Constraint::Length(6));
+    }
+
+    if has_duration {
+        header_cells.push(Cell::from("Time"));
+        widths.push(Constraint::Length(10));
+    }
+
+    let header = Row::new(header_cells).style(
         Style::default()
             .fg(Color::DarkGray)
             .add_modifier(Modifier::BOLD),
@@ -76,19 +88,21 @@ pub fn draw_server_users(
     let rows: Vec<Row> = sorted
         .iter()
         .map(|u| {
-            Row::new(vec![
-                Cell::from(u.name.clone()),
-                Cell::from(u.score.to_string()),
-                Cell::from(format_duration(u.duration)),
-            ])
+            let mut cells = vec![Cell::from(u.name.clone()), Cell::from(u.score.to_string())];
+
+            if has_ping {
+                cells.push(Cell::from(
+                    u.ping.map(|p| p.to_string()).unwrap_or("-".to_string()),
+                ));
+            }
+
+            if has_duration {
+                cells.push(Cell::from(format_duration(u.duration)));
+            }
+
+            Row::new(cells)
         })
         .collect();
-
-    let widths = [
-        Constraint::Min(12),
-        Constraint::Length(7),
-        Constraint::Length(10),
-    ];
 
     let table = Table::new(rows, widths)
         .header(header)

@@ -4,7 +4,7 @@
 use std::process;
 
 use clap::Parser;
-use srv_mon_term::{
+use gmon::{
     cli::Args,
     context::ContextInner,
     log_debug, log_fatal, log_info,
@@ -17,12 +17,19 @@ use srv_mon_term::{
 use tokio::select;
 use tokio_cron_scheduler::JobScheduler;
 
-use srv_mon_term::logger::types::level::LogLevel;
+use gmon::logger::types::level::LogLevel;
 
 #[tokio::main]
 async fn main() {
     // Parse CLI arguments.
     let args = Args::parse();
+
+    // Informational flags that exit before we set anything up.
+    if args.list_query_types {
+        Args::print_query_types();
+
+        return;
+    }
 
     // Parse log levels.
     let log_levels = if let Some(levels) = &args.log_levels {
@@ -43,7 +50,7 @@ async fn main() {
 
     // We use log_internal() until we create the context.
     logger
-        .log_internal(LogLevel::Info, "Starting srv-mon-term...")
+        .log_internal(LogLevel::Info, "Starting gmon...")
         .await;
 
     logger
@@ -122,8 +129,17 @@ async fn main() {
 
     // Setup servers as long as we're not in isolation mode.
     match servers_setup_all(ctx.clone()).await {
-        Ok(_) => {
-            log_info!(ctx, "Set up servers...");
+        // Basic mode has nothing to print without servers, but the TUI can add them.
+        Ok(0) if ctx.args.basic => {
+            log_info!(ctx, "No servers to monitor, exiting...");
+
+            return;
+        }
+        Ok(0) => {
+            log_info!(ctx, "No servers to monitor yet, add one with 'n'...");
+        }
+        Ok(count) => {
+            log_info!(ctx, "Set up {} server(s)...", count);
         }
         Err(e) => {
             log_fatal!(ctx, "Failed to set up servers: {}", e);

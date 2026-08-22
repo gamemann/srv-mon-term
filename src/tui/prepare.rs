@@ -1,4 +1,6 @@
 use anyhow::{Result, anyhow, bail};
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::{
     self, execute,
     terminal::{self, EnterAlternateScreen},
@@ -12,6 +14,10 @@ impl Tui {
     pub async fn prepare(&self, ctx: Context) -> Result<()> {
         let mut stdout = std::io::stdout();
 
+        // Create the terminal here so basic mode never needs a TTY.
+        let terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))
+            .map_err(|e| anyhow!("Failed to create terminal: {}", e))?;
+
         // We need to enable raw mode.
         terminal::enable_raw_mode().map_err(|e| anyhow!("Failed to enable raw mode: {}", e))?;
 
@@ -19,13 +25,16 @@ impl Tui {
         execute!(stdout, EnterAlternateScreen, crossterm::cursor::Hide)
             .map_err(|e| anyhow!("Failed to enter alternate screen: {}", e))?;
 
-        // Retrieve terminal.
+        // Store the terminal so the draw loop can use it.
         let mut term = self.term.lock().await;
 
-        // Finally clear the current terminal.
-        let term = term.backend_mut();
+        *term = Some(terminal);
 
-        term.clear()
+        // Finally clear the current terminal.
+        term.as_mut()
+            .expect("terminal was just stored")
+            .backend_mut()
+            .clear()
             .map_err(|e| anyhow!("Failed to clear terminal: {}", e))?;
 
         // Setup input handling.

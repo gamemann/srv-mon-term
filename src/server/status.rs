@@ -5,75 +5,37 @@ use crate::{
 };
 
 impl ServerCtx {
+    /// Resolves the overall status we show for a server.
+    ///
+    /// The status of the query we monitor is authoritative. Failures of the other queries are
+    /// surfaced in their own panels instead, since plenty of servers answer info queries while
+    /// blocking the player or rule queries.
     pub async fn get_status(&self, statuses: ServerStatuses, ctx: Context) -> ServerStatus {
-        let err = {
-            let query_monitor = ctx.args.parse_query_monitor();
-            let monitor_only = ctx.args.use_query_monitor_only;
+        let query_monitor = ctx.args.parse_query_monitor();
+        let monitor_only = ctx.args.use_query_monitor_only;
 
-            let do_info =
-                (monitor_only && query_monitor == Some(QueryMonitor::Info)) || !monitor_only;
-
-            let info_err = if let ServerStatus::Error(code) = statuses.query_info {
-                Some(code.clone())
-            } else {
-                None
-            };
-
-            let do_vars =
-                (monitor_only && query_monitor == Some(QueryMonitor::Vars)) || !monitor_only;
-
-            let vars_err = if let ServerStatus::Error(code) = statuses.query_vars {
-                Some(code.clone())
-            } else {
-                None
-            };
-
-            let do_users =
-                (monitor_only && query_monitor == Some(QueryMonitor::Users)) || !monitor_only;
-
-            let users_err = if let ServerStatus::Error(code) = statuses.query_users {
-                Some(code.clone())
-            } else {
-                None
-            };
-
+        let primary = if monitor_only {
             match query_monitor {
-                Some(QueryMonitor::Info) => {
-                    if do_info {
-                        info_err
-                    } else {
-                        None
-                    }
-                }
-                Some(QueryMonitor::Vars) => {
-                    if do_vars {
-                        vars_err
-                    } else {
-                        None
-                    }
-                }
-                Some(QueryMonitor::Users) => {
-                    if do_users {
-                        users_err
-                    } else {
-                        None
-                    }
-                }
-
-                None => {
-                    if do_info || do_vars || do_users {
-                        info_err.or(vars_err).or(users_err)
-                    } else {
-                        None
-                    }
-                }
+                Some(QueryMonitor::Users) => statuses.query_users.clone(),
+                Some(QueryMonitor::Vars) => statuses.query_vars.clone(),
+                _ => statuses.query_info.clone(),
             }
+        } else {
+            statuses.query_info.clone()
         };
 
-        if let Some(e) = err {
-            ServerStatus::Error(e)
-        } else {
-            ServerStatus::Online
+        if primary != ServerStatus::Unknown {
+            return primary;
         }
+
+        // Fall back to whichever query has actually run so far.
+        [
+            statuses.query_info,
+            statuses.query_users,
+            statuses.query_vars,
+        ]
+        .into_iter()
+        .find(|s| *s != ServerStatus::Unknown)
+        .unwrap_or(ServerStatus::Unknown)
     }
 }

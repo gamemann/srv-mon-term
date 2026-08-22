@@ -8,23 +8,22 @@ use crate::tui::types::Tui;
 impl Tui {
     pub async fn draw(&self, ctx: Context) -> Result<()> {
         {
-            // We need to attempt to fetch draw data, type, and key bindings.
-            // We clone the state here since we don't intend on editing it and we don't want to hold the lock while drawing.
-            let (draw_data, int_type, key_mappings) = {
-                let mut state = self.state.write().await;
+            // The lock is held across the fetch and the render so the interface can't change
+            // underneath us, which would leave us drawing another interface's data.
+            let mut state = self.state.write().await;
 
-                let draw_data = state.interface.fetch_snapshot_data(ctx.clone()).await?;
+            let draw_data = state.interface.fetch_snapshot_data(ctx.clone()).await?;
 
-                let int_type = state.interface.get_type().clone();
-                let key_mappings = state.interface.get_key_bindings().clone();
+            let int_type = state.interface.get_type();
+            let key_mappings = state.interface.get_key_bindings();
 
-                (draw_data, int_type, key_mappings)
-            };
-
-            let state = self.state.read().await;
-
-            // Retrieve terminal.
+            // Retrieve terminal. Nothing to do when the TUI was never prepared (basic mode).
             let mut term = self.term.lock().await;
+
+            let term = match term.as_mut() {
+                Some(term) => term,
+                None => return Ok(()),
+            };
 
             // Draw the current interface.
             term.draw(|frame| {

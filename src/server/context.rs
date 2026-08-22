@@ -46,9 +46,14 @@ pub struct ServerCtx {
 
 impl ServerCtx {
     pub fn new(id: Option<String>, ip: String, port: u16, port_query: Option<u16>) -> Self {
+        Self::from_server(id, Server::new(ip, port, port_query))
+    }
+
+    /// Builds a context around a fully configured server (settings from the store included).
+    pub fn from_server(id: Option<String>, server: Server) -> Self {
         Self {
             id: id.unwrap_or_else(|| Uuid::now_v7().to_string()),
-            server: RwLock::new(Server::new(ip, port, port_query)),
+            server: RwLock::new(server),
             statuses: RwLock::new(ServerStatuses::default()),
             tasks: RwLock::new(ServerTasks::default()),
             latency: RwLock::new(VecDeque::new()),

@@ -13,9 +13,7 @@ use ratatui::{
 };
 
 use crate::{
-    cli::QueryMonitor,
     context::Context,
-    log_error,
     server::{
         Server, ServerCtx, ServerStatuses, data::ServerStatus, types::latency::ServerLatency,
     },

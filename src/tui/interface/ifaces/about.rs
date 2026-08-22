@@ -73,7 +73,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceAbout> {
             Line::from(vec![
                 Span::styled("Name: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    "srv-mon-term",
+                    "gmon",
                     Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use ratatui::crossterm::event::{self, Event, KeyModifiers};
-use tokio::sync::mpsc::{channel, error::TrySendError};
+use tokio::sync::mpsc::unbounded_channel;
 
 use crate::{
     context::Context,
@@ -20,7 +20,8 @@ impl Tui {
     pub async fn setup_input(ctx: Context) -> Result<()> {
         let task_ctx = ctx.clone();
 
-        let (tx, mut rx) = channel::<Event>(16);
+        // Unbounded so fast typing in a form never loses characters.
+        let (tx, mut rx) = unbounded_channel::<Event>();
 
         let poll_interval = ctx.settings.read().await.tui_input_poll_interval;
         let cancel_for_poll = ctx.cancel_token.clone();
@@ -33,12 +34,10 @@ impl Tui {
 
                 match event::poll(Duration::from_millis(poll_interval)) {
                     Ok(true) => {
-                        if let Ok(ev) = event::read() {
-                            match tx.try_send(ev) {
-                                Ok(_) => {}
-                                Err(TrySendError::Full(_)) => {}
-                                Err(TrySendError::Closed(_)) => break,
-                            }
+                        if let Ok(ev) = event::read()
+                            && tx.send(ev).is_err()
+                        {
+                            break;
                         }
                     }
                     Ok(false) => {}
@@ -56,7 +55,7 @@ impl Tui {
                 let (current_type, action) = {
                     let mut state = ctx.tui.state.write().await;
 
-                    let current_type = state.interface.get_type().clone();
+                    let current_type = state.interface.get_type();
                     let action = state
                         .interface
                         .handle_input(key, ctx.clone())

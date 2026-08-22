@@ -31,6 +31,8 @@ pub struct InfoResponse {
     pub map_name: Option<String>,
     pub game_name: Option<String>,
 
+    pub game_port: Option<u16>,
+
     pub game_dir: Option<String>,
     pub game_id: Option<u16>,
 

@@ -1,30 +1,197 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow, bail};
+use uuid::Uuid;
 
 use crate::cli::QueryMonitor;
 use crate::context::Context;
 
-use crate::server::check_server_cli;
+use crate::server::cli::{apply_overrides, check_server_cli, ensure_query_type};
 use crate::server::context::ServerCtx;
+use crate::server::types::Server;
 use crate::server::types::latency::ServerLatencyType;
 use crate::store::ext::StoreExt;
 use crate::store::server::ServerStore;
-use crate::{log_info, logger::level::LogLevel, logger::Logger};
-use crate::{log_trace, log_warn};
+use crate::{log_info, log_trace, log_warn, logger::Logger, logger::level::LogLevel};
 
-pub async fn servers_setup_all(ctx: Context) -> Result<()> {
+/// Latency sources that belong to each monitored query.
+fn latency_types_for(monitor: &QueryMonitor) -> [ServerLatencyType; 2] {
+    match monitor {
+        QueryMonitor::Info => [ServerLatencyType::SelfInfo, ServerLatencyType::A2sInfo],
+        QueryMonitor::Users => [ServerLatencyType::SelfUsers, ServerLatencyType::A2sPlayers],
+        QueryMonitor::Vars => [ServerLatencyType::SelfVars, ServerLatencyType::A2sRules],
+    }
+}
+
+/// Merges the server described on the command line into the list loaded from the store.
+async fn merge_cli_server(ctx: &Context, servers: &mut Vec<ServerStore>) -> Result<()> {
+    let args = &ctx.args;
+
+    let mut cli_server = match check_server_cli(ctx.clone()).await? {
+        Some(server) => server,
+        None => return Ok(()),
+    };
+
+    let existing = servers
+        .iter()
+        .position(|srv| srv.ip == cli_server.ip && srv.port == cli_server.port);
+
+    // Deletion only needs the address.
+    if args.delete {
+        let idx = match existing {
+            Some(idx) => idx,
+            None => bail!(
+                "Server {} not found in the store for deletion.",
+                cli_server.to_addr()
+            ),
+        };
+
+        let record = servers.remove(idx);
+
+        {
+            let mut store = ctx.store.write().await;
+
+            store.srv_delete(&record).await.map_err(|e| {
+                anyhow!(
+                    "Failed to delete server {} from store: {}",
+                    record.to_addr(),
+                    e
+                )
+            })?;
+        }
+
+        log_info!(ctx, "Deleted server {} from store.", record.to_addr());
+
+        return Ok(());
+    }
+
+    match existing {
+        // Apply the overrides on top of what we already know about the server.
+        Some(idx) => {
+            let record = &mut servers[idx];
+
+            let id = record.id.clone();
+
+            apply_overrides(record, args)?;
+
+            record.id = id;
+
+            if args.save {
+                let record = record.clone();
+
+                let mut store = ctx.store.write().await;
+
+                store.srv_update(&record).await.map_err(|e| {
+                    anyhow!(
+                        "Failed to update server {} in store: {}",
+                        record.to_addr(),
+                        e
+                    )
+                })?;
+
+                log_info!(ctx, "Updated server {} in store.", record.to_addr());
+            }
+        }
+        None => {
+            ensure_query_type(&mut cli_server, args)?;
+
+            cli_server.id = Uuid::now_v7().to_string();
+
+            if args.save {
+                let mut store = ctx.store.write().await;
+
+                store.srv_add(&cli_server).await.map_err(|e| {
+                    anyhow!(
+                        "Failed to add server {} to store: {}",
+                        cli_server.to_addr(),
+                        e
+                    )
+                })?;
+
+                log_info!(ctx, "Added server {} to store.", cli_server.to_addr());
+            }
+
+            servers.push(cli_server);
+        }
+    }
+
+    Ok(())
+}
+
+/// Sets up every server we should monitor and returns how many were started.
+/// Registers a server while the program is running: persists it (when asked), builds its
+/// context and starts its query/latency tasks.
+pub async fn server_add(
+    ctx: Context,
+    mut record: ServerStore,
+    persist: bool,
+) -> Result<Arc<ServerCtx>> {
+    record.ip = record.ip.trim().to_string();
+
+    if record.ip.is_empty() {
+        bail!("A destination address is required.");
+    }
+
+    if record.port == 0 {
+        bail!("A valid port is required.");
+    }
+
+    // Reject addresses we already monitor so we don't end up querying twice.
+    {
+        let servers = ctx.servers.read().await;
+
+        for srv_ctx in servers.iter() {
+            let server = srv_ctx.server.read().await;
+
+            if server.ip == record.ip && server.port == record.port {
+                bail!("{} is already being monitored.", record.to_addr());
+            }
+        }
+    }
+
+    if record.id.trim().is_empty() {
+        record.id = Uuid::now_v7().to_string();
+    }
+
+    if persist {
+        let mut store = ctx.store.write().await;
+
+        store
+            .srv_add(&record)
+            .await
+            .map_err(|e| anyhow!("Failed to add server {} to store: {}", record.to_addr(), e))?;
+    }
+
+    let addr = record.to_addr();
+    let id = record.id.clone();
+
+    let srv_ctx = Arc::new(ServerCtx::from_server(Some(id), Server::from(record)));
+
+    ServerCtx::add(srv_ctx.clone(), ctx.clone())
+        .await
+        .map_err(|e| anyhow!("Failed to add server context for {}: {}", addr, e))?;
+
+    srv_ctx
+        .clone()
+        .setup_tasks(ctx.clone())
+        .await
+        .map_err(|e| anyhow!("Failed to setup tasks for server '{}': {}", addr, e))?;
+
+    log_info!(ctx, "Now monitoring {}.", addr);
+
+    Ok(srv_ctx)
+}
+
+pub async fn servers_setup_all(ctx: Context) -> Result<usize> {
     let args = ctx.args.clone();
 
-    let mut servers_store = if !args.isolate {
+    let mut servers = if !args.isolate {
         let store = ctx.store.read().await;
 
         match store.srv_fetch_all().await {
             Ok(res) => {
-                log_info!(ctx,
-                    "Fetched {} servers from store.",
-                    res.len()
-                );
+                log_info!(ctx, "Fetched {} servers from store.", res.len());
 
                 res
             }
@@ -34,79 +201,23 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
         Vec::new()
     };
 
-    // Check for CLI override.
-    let srv_cli = check_server_cli(ctx.clone()).await?;
+    merge_cli_server(&ctx, &mut servers).await?;
 
-    // First, check if we need to edit the CLI server in the store for the ID.
-    if let Some(s) = &srv_cli {
-        // Check if the server already exists in the store.
-        let mut existing_server = servers_store
-            .iter_mut()
-            .find(|srv| srv.ip == s.ip && srv.port == s.port);
+    // Drop duplicate addresses regardless of the order they came back in.
+    let mut seen = HashSet::new();
+    servers.retain(|srv| seen.insert((srv.ip.clone(), srv.port)));
 
-        // Check for deletion.
-        let is_deleted = {
-            let mut is_deleted = false;
-
-            if args.delete {
-                if let Some(existing) = existing_server {
-                    let mut store = ctx.store.write().await;
-
-                    store.srv_delete(existing).await.map_err(|e| {
-                        anyhow!(
-                            "Failed to delete server {}:{} from store: {}",
-                            s.ip,
-                            s.port,
-                            e
-                        )
-                    })?;
-
-                    log_info!(ctx,
-                        "Deleted server {}:{} from store from CLI delete flag.",
-                        s.ip,
-                        s.port
-                    );
-
-                    // Server no longer exists.
-                    existing_server = None;
-
-                    is_deleted = true;
-                } else {
-                    bail!(
-                        "Server {}:{} not found in the store for deletion.",
-                        s.ip,
-                        s.port
-                    );
-                }
-            }
-
-            is_deleted
-        };
-
-        if !is_deleted {
-            if let Some(existing_server) = existing_server {
-                // Update the existing server with CLI values.
-                existing_server.query_type = s.query_type.clone();
-                existing_server.query_timeout = s.query_timeout;
-            } else {
-                // If it doesn't exist, add it to the list.
-                servers_store.push(ServerStore {
-                    ip: s.ip.clone(),
-                    port: s.port,
-                    query_type: s.query_type.clone(),
-                    query_timeout: s.query_timeout,
-                    ..Default::default()
-                });
-            }
-        }
+    if args.isolate
+        && let Some(ref dst) = args.dst
+    {
+        log_trace!(ctx, "Isolating to server from CLI ({}).", dst);
     }
 
-    servers_store.dedup_by_key(|s| (s.ip.clone(), s.port));
+    // Having nothing to monitor isn't an error: the TUI can add servers at runtime.
+    if servers.is_empty() {
+        log_info!(ctx, "No servers to monitor yet.");
 
-    if servers_store.is_empty() {
-        return Err(anyhow!(
-            "No servers found in the store or provided via CLI."
-        ));
+        return Ok(0);
     }
 
     log_trace!(ctx, "Clearing servers...");
@@ -114,80 +225,18 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
     // Reset the servers context vector.
     ctx.servers.write().await.clear();
 
-    // We'll now want to loop through each server and spawn tasks required.
-    for server in servers_store {
-        let addr = format!("{}:{}", server.ip, server.port);
+    let mut total = 0;
 
-        log_trace!(ctx,
-            "Setting up server context for {}...",
-            addr
-        );
+    for record in servers {
+        let addr = record.to_addr();
 
-        let id = if server.id.trim().len() > 0 {
-            Some(server.id.clone())
-        } else {
-            None
-        };
+        log_trace!(ctx, "Setting up server context for {}...", addr);
 
-        let new_ctx = Arc::new(ServerCtx::new(
-            id,
-            server.ip.clone(),
-            server.port,
-            server.port_query,
-        ));
-
-        log_trace!(ctx,
-            "Successfully created server context for {}",
-            addr
-        );
-
-        match ServerCtx::add(new_ctx.clone(), ctx.clone()).await {
-            Ok(_) => {
-                log_trace!(ctx,
-                    "Successfully added server context to main vector {}.",
-                    addr
-                );
-            }
+        // Already persisted (or intentionally CLI only), so never write it back here.
+        match server_add(ctx.clone(), record, false).await {
+            Ok(_) => total += 1,
             Err(e) => {
-                log_warn!(ctx,
-                    "Failed to add server context for {}: {}",
-                    addr,
-                    e
-                );
-            }
-        }
-
-        let id_now = new_ctx.id.clone();
-
-        // Spawn tasks for the server.
-        new_ctx
-            .setup_tasks(ctx.clone())
-            .await
-            .map_err(|e| anyhow!("Failed to setup tasks for server '{}': {}", addr, e))?;
-
-        // Make sure we save the server to the store if the CLI flag is set and the server matches the CLI server.
-        if args.save
-            && let Some(ref s) = srv_cli
-        {
-            if s.ip == server.ip && s.port == server.port {
-                let s = s.clone();
-
-                let mut store = ctx.store.write().await;
-
-                let updated_server = ServerStore {
-                    id: id_now,
-                    ..server
-                };
-
-                store.srv_add(&updated_server).await.map_err(|e| {
-                    anyhow!("Failed to add server {}:{} to store: {}", s.ip, s.port, e)
-                })?;
-
-                log_info!(ctx,
-                    "Added new server {}:{} to store from CLI add flag.",
-                    s.ip,
-                    s.port
-                );
+                log_warn!(ctx, "Failed to set up server {}: {}", addr, e);
             }
         }
     }
@@ -201,182 +250,41 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
 
         sch.set_shutdown_handler(Box::new(move || {
             let ctx = shutdown_ctx.clone();
-                
+
             Box::pin(async move {
-                // We need to loop through all servers and log their latency summaries.
                 let servers = ctx.servers.read().await;
 
-                log_info!(ctx,
+                log_info!(
+                    ctx,
                     "Scheduler shutdown initiated. Logging latency summaries for all servers..."
                 );
 
+                let query_monitor = ctx.args.parse_query_monitor().unwrap_or(QueryMonitor::Info);
+                let types = latency_types_for(&query_monitor);
+
                 for srv_ctx in servers.iter() {
-                    let self_clone = srv_ctx.clone();
-                    let ctx = ctx.clone();
+                    let addr = srv_ctx.server.read().await.to_addr();
 
-                    let addr = {
-                        let server = self_clone.server.read().await;
-
-                        format!("{}:{}", server.ip, server.port)
-                    };
-
-                    let query_monitor = ctx.args.parse_query_monitor().unwrap_or(QueryMonitor::Info);
-                    
-                    // Retrieve minimum, maximum and average latency for each type and log it.
-                    let (info_min, info_max, info_avg) = if query_monitor == QueryMonitor::Info {
-                        
-                        let history = self_clone.latency.read().await;
-
-                        let history = history
-                            .iter()
-                            .filter(|x| (x.type_ == ServerLatencyType::A2sInfo || x.type_ == ServerLatencyType::SelfInfo) && x.val > 0)
-                            .collect::<Vec<_>>();
-
-                        let min = history
-                            .iter()
-                            .min_by_key(|l| l.val)
-                            .map(|l| l.val)
-                            .unwrap_or(0);
-
-                        let max = history
-                            .iter()
-                            .max_by_key(|l| l.val)
-                            .map(|l| l.val)
-                            .unwrap_or(0);
-
-                        let avg = if history.len() > 0 {
-                            history.iter().map(|l| l.val).sum::<u64>() / history.len() as u64
-                        } else {
-                            0
-                        };
-
-                        (
-                            min as f64 / 1000.0,
-                            max as f64 / 1000.0,
-                            avg as f64 / 1000.0,
-                        )
-                    } else { 
-                        (0.0, 0.0, 0.0)
-                    };
-
-                    let (users_min, users_max, users_avg) = if query_monitor == QueryMonitor::Users {
-                        let history = self_clone.latency.read().await;
-
-                        let history = history
-                            .iter()
-                            .filter(|x| (x.type_ == ServerLatencyType::A2sPlayers || x.type_ == ServerLatencyType::SelfUsers) && x.val > 0)
-                            .collect::<Vec<_>>();
-
-                        let min = history
-                            .iter()
-                            .min_by_key(|l| l.val)
-                            .map(|l| l.val)
-                            .unwrap_or(0);
-
-                        let max = history
-                            .iter()
-                            .max_by_key(|l| l.val)
-                            .map(|l| l.val)
-                            .unwrap_or(0);
-
-                        let avg = if history.len() > 0 {
-                            history.iter().map(|l| l.val).sum::<u64>() / history.len() as u64
-                        } else {
-                            0
-                        };
-
-                        (
-                            min as f64 / 1000.0,
-                            max as f64 / 1000.0,
-                            avg as f64 / 1000.0,
-                        )
-                    } else {
-                        (0.0, 0.0, 0.0)
-                    };
-
-                    let (vars_min, vars_max, vars_avg) = if query_monitor == QueryMonitor::Vars {
-                        let history = self_clone.latency.read().await;
-
-                        let history = history
-                            .iter()
-                            .filter(|x| (x.type_ == ServerLatencyType::A2sRules || x.type_ == ServerLatencyType::SelfVars) && x.val > 0)
-                            .collect::<Vec<_>>();
-
-                        let min = history
-                            .iter()
-                            .min_by_key(|l| l.val)
-                            .map(|l| l.val)
-                            .unwrap_or(0);
-
-                        let max = history
-                            .iter()
-                            .max_by_key(|l| l.val)
-                            .map(|l| l.val)
-                            .unwrap_or(0);
-
-                        let avg = if history.len() > 0 {
-                            history.iter().map(|l| l.val).sum::<u64>() / history.len() as u64
-                        } else {
-                            0
-                        };
-
-                        (
-                            min as f64 / 1000.0,
-                            max as f64 / 1000.0,
-                            avg as f64 / 1000.0,
-                        )
-                    } else {
-                        (0.0, 0.0, 0.0)
-                    };
-
-                    match query_monitor {
-                        QueryMonitor::Info => {
-                            if info_avg > 0.0 {
-                                log_info!(ctx,
-                                    "Latency summary for server {} (Info): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
-                                    addr,
-                                    info_min,
-                                    info_max,
-                                    info_avg
-                                );
-                            } else {
-                                log_info!(ctx,
-                                    "Latency summary for server {} (Info): No data available (Offline?)",
-                                    addr
-                                );
-                            }
+                    match srv_ctx.latency_summary(&types).await {
+                        Some(summary) => {
+                            log_info!(
+                                ctx,
+                                "Latency summary for server {} ({}): min: {:.2}ms, max: {:.2}ms, avg: {:.2}ms over {} samples",
+                                addr,
+                                query_monitor.to_str(),
+                                summary.min,
+                                summary.max,
+                                summary.avg,
+                                summary.samples
+                            );
                         }
-                        QueryMonitor::Users => {
-                            if users_avg > 0.0 {
-                                log_info!(ctx,
-                                    "Latency summary for server {} (Users): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
-                                    addr,
-                                    users_min,
-                                    users_max,
-                                    users_avg
-                                );
-                            } else {
-                                log_info!(ctx,
-                                    "Latency summary for server {} (Users): No data available (Offline?)",
-                                    addr
-                                );
-                            }
-                        }
-                        QueryMonitor::Vars => {
-                            if vars_avg > 0.0 {
-                                log_info!(ctx,
-                                    "Latency summary for server {} (Vars): min:{:.2}ms, max: {:.2}ms, avg: {:.2}ms",
-                                    addr,
-                                    vars_min,
-                                    vars_max,
-                                    vars_avg
-                                );
-                            } else {
-                                log_info!(ctx,
-                                    "Latency summary for server {} (Vars): No data available (Offline?)",
-                                    addr
-                                );
-                            }
+                        None => {
+                            log_info!(
+                                ctx,
+                                "Latency summary for server {} ({}): No data available (Offline?)",
+                                addr,
+                                query_monitor.to_str()
+                            );
                         }
                     }
                 }
@@ -384,5 +292,5 @@ pub async fn servers_setup_all(ctx: Context) -> Result<()> {
         }));
     }
 
-    Ok(())
+    Ok(total)
 }

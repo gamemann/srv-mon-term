@@ -1,6 +1,7 @@
 use clap::Parser;
 
 use crate::logger::types::level::LogLevel;
+use crate::server::types::query::ServerQueryType;
 
 use std::str::FromStr;
 
@@ -44,8 +45,8 @@ pub struct Args {
     #[arg(
         short = 'p',
         long = "store-path",
-        help = "The storage file path without the extension (default ~/.config/srv-mon-term/store{.db,.json}).",
-        default_value = "~/.config/srv-mon-term/store"
+        help = "The storage file path without the extension (default ~/.config/gmon/store{.db,.json}).",
+        default_value = "~/.config/gmon/store"
     )]
     pub store_path: String,
 
@@ -89,7 +90,11 @@ pub struct Args {
     #[arg(short = 'P', long = "port", help = "Port for the server to monitor.")]
     pub port: Option<u16>,
 
-    #[arg(short = 'q', long = "query", help = "The query type to use.")]
+    #[arg(
+        short = 'q',
+        long = "query",
+        help = "The query type to use (see --list-query-types). Guessed from the port when omitted."
+    )]
     pub query: Option<String>,
 
     #[arg(
@@ -117,9 +122,42 @@ pub struct Args {
     #[arg(
         short = 't',
         long = "timeout",
-        help = "The timeout in seconds for server queries (default: 5)."
+        help = "The timeout in milliseconds for server queries (default: 2000)."
     )]
     pub timeout: Option<u64>,
+
+    #[arg(
+        short = 'c',
+        long = "query-interval",
+        help = "How often to query the server in milliseconds (default: 1000)."
+    )]
+    pub query_interval: Option<u64>,
+
+    #[arg(
+        short = 'n',
+        long = "name",
+        help = "A display name to show for the server instead of its hostname."
+    )]
+    pub name: Option<String>,
+
+    #[arg(
+        long = "latency-type",
+        help = "How latency is measured: self-info, self-users, self-vars, query-info, query-users, query-vars or icmp."
+    )]
+    pub latency_type: Option<String>,
+
+    #[arg(
+        long = "latency-interval",
+        help = "How often to measure latency in milliseconds (defaults to the query interval)."
+    )]
+    pub latency_interval: Option<u64>,
+
+    #[arg(
+        long = "list-query-types",
+        help = "Lists every supported query type and exits.",
+        default_value_t = false
+    )]
+    pub list_query_types: bool,
 
     #[arg(
         short = 'I',
@@ -173,5 +211,25 @@ impl Args {
 
     pub fn parse_query_monitor(&self) -> Option<QueryMonitor> {
         QueryMonitor::from_str(&self.query_monitor)
+    }
+
+    /// Prints every supported query type along with the games it covers.
+    pub fn print_query_types() {
+        println!("Supported query types:");
+
+        for query_type in ServerQueryType::ALL {
+            let aliases = query_type.aliases().join(", ");
+
+            println!(
+                "  {:<10} {}{}",
+                query_type.name(),
+                query_type.description(),
+                if aliases.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [aliases: {}]", aliases)
+                }
+            );
+        }
     }
 }

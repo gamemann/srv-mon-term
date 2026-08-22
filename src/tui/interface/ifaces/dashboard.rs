@@ -32,15 +32,9 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TuiInterfaceDashboard {
     pub selected: usize,
-}
-
-impl Default for TuiInterfaceDashboard {
-    fn default() -> Self {
-        Self { selected: 0 }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -84,7 +78,12 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
     }
 
     fn get_key_bindings(&self) -> Vec<(String, String)> {
-        vec![("Esc".to_string(), "Quit".to_string())]
+        vec![
+            ("Esc".to_string(), "Quit".to_string()),
+            ("↑↓".to_string(), "Select".to_string()),
+            ("Enter".to_string(), "View".to_string()),
+            ("n".to_string(), "Add server".to_string()),
+        ]
     }
 
     async fn handle_input(&mut self, key: KeyEvent, ctx: Context) -> Result<TuiAction> {
@@ -94,12 +93,18 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
 
             // Menu controls.
             KeyCode::Up | KeyCode::Char('k') => {
-                if self.interface.selected > 0 {
-                    self.interface.selected -= 1;
-                }
+                self.interface.selected = self.interface.selected.saturating_sub(1);
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.interface.selected += 1;
+            }
+
+            // Add a new server.
+            KeyCode::Char('n') => {
+                return Ok(TuiAction::ChangeInterface(
+                    TuiInterfaceType::ServerNew,
+                    None,
+                ));
             }
 
             // Handle selecting a server.
@@ -156,7 +161,7 @@ impl TuiInterfaceExt for TuiInterfaceContext<TuiInterfaceDashboard> {
 
         // Check if our server snapshots list is empty, if so display a message to the user.
         if servers.is_empty() {
-            let msg = Paragraph::new("No servers configured. Use the CLI to add servers.")
+            let msg = Paragraph::new("No servers configured. Press 'n' to add one.")
                 .style(Style::default().fg(Color::DarkGray))
                 .block(Block::default().borders(Borders::NONE));
 

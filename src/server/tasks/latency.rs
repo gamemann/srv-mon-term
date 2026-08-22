@@ -9,7 +9,7 @@ use crate::{
     log_error, log_info, log_trace,
     logger::Logger,
     logger::level::LogLevel,
-    server::{ServerCtx, data::ServerStatus},
+    server::{ServerCtx, data::ServerStatus, types::latency::ServerLatencyType},
 };
 
 impl ServerCtx {
@@ -18,10 +18,16 @@ impl ServerCtx {
         let job_ctx = ctx.clone();
         let job_self = self.clone();
 
-        let interval = {
+        let (interval, latency_type) = {
             let server = self.server.read().await;
 
-            server.latency_interval.unwrap_or(server.query_interval)
+            (
+                server
+                    .latency_interval
+                    .filter(|i| *i > 0)
+                    .unwrap_or(server.query_interval),
+                server.latency_type,
+            )
         };
 
         let lock = Arc::new(Mutex::new(()));
@@ -57,6 +63,16 @@ impl ServerCtx {
                         return;
                     }
                 };
+
+                // Nothing to do when latency comes from the regular query task.
+                if matches!(
+                    latency_type,
+                    ServerLatencyType::SelfInfo
+                        | ServerLatencyType::SelfUsers
+                        | ServerLatencyType::SelfVars
+                ) {
+                    return;
+                }
 
                 match self_clone.run_custom_latency(ctx.clone()).await {
                     Ok(_) => {

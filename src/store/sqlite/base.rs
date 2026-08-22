@@ -120,49 +120,45 @@ impl StoreExt for StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
             let server = ServerStore {
                 id: id.to_string(),
                 ip: row
-                    .get(1)
+                    .get(0)
                     .map_err(|e| anyhow!("Failed to get ip from row: {}", e))?,
                 port: row
-                    .get(2)
+                    .get(1)
                     .map_err(|e| anyhow!("Failed to get port from row: {}", e))?,
                 display_name: row
-                    .get(3)
+                    .get(2)
                     .map_err(|e| anyhow!("Failed to get display_name from row: {}", e))?,
                 port_query: row
-                    .get(4)
+                    .get(3)
                     .map_err(|e| anyhow!("Failed to get port_query from row: {}", e))?,
                 query_interval: row
-                    .get::<_, i64>(5)
+                    .get::<_, i64>(4)
                     .map_err(|e| anyhow!("Failed to get query_interval from row: {}", e))?
                     as u64,
                 query_timeout: row
-                    .get::<_, i64>(6)
+                    .get::<_, i64>(5)
                     .map_err(|e| anyhow!("Failed to get query_timeout from row: {}", e))?
                     as u64,
                 query_type: row
-                    .get::<_, i32>(7)
+                    .get::<_, i32>(6)
                     .map_err(|e| anyhow!("Failed to get query_type from row: {}", e))?
-                    .try_into()
-                    .map_err(|e| anyhow!("Failed to convert query_type from row: {}", e))?,
+                    .into(),
                 latency_interval: row
-                    .get::<_, Option<i64>>(8)
+                    .get::<_, Option<i64>>(7)
                     .map_err(|e| anyhow!("Failed to get latency_interval from row: {}", e))?
                     .map(|v| v as u64),
                 latency_timeout: row
-                    .get::<_, Option<i64>>(9)
+                    .get::<_, Option<i64>>(8)
                     .map_err(|e| anyhow!("Failed to get latency_timeout from row: {}", e))?
                     .map(|v| v as u64),
                 latency_type: row
-                    .get::<_, i32>(10)
+                    .get::<_, i32>(9)
                     .map_err(|e| anyhow!("Failed to get latency_type from row: {}", e))?
-                    .try_into()
-                    .map_err(|e| anyhow!("Failed to convert latency_type from row: {}", e))?,
+                    .into(),
                 latency_history_size: row
-                    .get::<_, u32>(11)
+                    .get::<_, u32>(10)
                     .map_err(|e| anyhow!("Failed to get latency_history_size from row: {}", e))?
                     as usize,
-
-                ..Default::default()
             };
 
             Ok(Some(server))
@@ -197,12 +193,12 @@ impl StoreExt for StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
                     .map_err(|e| anyhow!("Failed to get id from row: {}", e))?,
                 ip: ip.to_string(),
                 port,
-                port_query: row
-                    .get(2)
-                    .map_err(|e| anyhow!("Failed to get port_query from row: {}", e))?,
                 display_name: row
                     .get(1)
                     .map_err(|e| anyhow!("Failed to get display_name from row: {}", e))?,
+                port_query: row
+                    .get(2)
+                    .map_err(|e| anyhow!("Failed to get port_query from row: {}", e))?,
                 query_interval: row
                     .get::<_, i64>(3)
                     .map_err(|e| anyhow!("Failed to get query_interval from row: {}", e))?
@@ -214,8 +210,7 @@ impl StoreExt for StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
                 query_type: row
                     .get::<_, i32>(5)
                     .map_err(|e| anyhow!("Failed to get query_type from row: {}", e))?
-                    .try_into()
-                    .map_err(|e| anyhow!("Failed to convert query_type from row: {}", e))?,
+                    .into(),
                 latency_interval: row
                     .get::<_, Option<i64>>(6)
                     .map_err(|e| anyhow!("Failed to get latency_interval from row: {}", e))?
@@ -227,14 +222,11 @@ impl StoreExt for StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
                 latency_type: row
                     .get::<_, i32>(8)
                     .map_err(|e| anyhow!("Failed to get latency_type from row: {}", e))?
-                    .try_into()
-                    .map_err(|e| anyhow!("Failed to convert latency_type from row: {}", e))?,
+                    .into(),
                 latency_history_size: row
                     .get::<_, u32>(9)
                     .map_err(|e| anyhow!("Failed to get latency_history_size from row: {}", e))?
                     as usize,
-
-                ..Default::default()
             };
 
             Ok(Some(server))
@@ -292,8 +284,7 @@ impl StoreExt for StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
                 query_type: row
                     .get::<_, i32>(7)
                     .map_err(|e| anyhow!("Failed to get query_type from row: {}", e))?
-                    .try_into()
-                    .map_err(|e| anyhow!("Failed to convert query_type from row: {}", e))?,
+                    .into(),
                 latency_interval: row
                     .get::<_, Option<i64>>(8)
                     .map_err(|e| anyhow!("Failed to get latency_interval from row: {}", e))?
@@ -305,14 +296,11 @@ impl StoreExt for StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
                 latency_type: row
                     .get::<_, i32>(10)
                     .map_err(|e| anyhow!("Failed to get latency_type from row: {}", e))?
-                    .try_into()
-                    .map_err(|e| anyhow!("Failed to convert latency_type from row: {}", e))?,
+                    .into(),
                 latency_history_size: row
                     .get::<_, u32>(11)
                     .map_err(|e| anyhow!("Failed to get latency_history_size from row: {}", e))?
                     as usize,
-
-                ..Default::default()
             };
 
             servers.push(server);
@@ -344,10 +332,10 @@ impl StoreExt for StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
                 ":port_query": server.port_query,
                 ":query_interval": server.query_interval as i64,
                 ":query_timeout": server.query_timeout as i64,
-                ":query_type": server.query_type.clone() as i32,
+                ":query_type": i32::from(server.query_type),
                 ":latency_interval": server.latency_interval.map(|v| v as i64),
                 ":latency_timeout": server.latency_timeout.map(|v| v as i64),
-                ":latency_type": server.latency_type.clone() as i32,
+                ":latency_type": i32::from(server.latency_type),
                 ":latency_history_size": server.latency_history_size as i64,
             ],
         )
@@ -373,10 +361,10 @@ impl StoreExt for StoreCtx<SqliteStore, StoreSqliteState, StoreSqliteOpts> {
                 ":port_query": server.port_query,
                 ":query_interval": server.query_interval as i64,
                 ":query_timeout": server.query_timeout as i64,
-                ":query_type": server.query_type.clone() as i32,
+                ":query_type": i32::from(server.query_type),
                 ":latency_interval": server.latency_interval.map(|v| v as i64),
                 ":latency_timeout": server.latency_timeout.map(|v| v as i64),
-                ":latency_type": server.latency_type.clone() as i32,
+                ":latency_type": i32::from(server.latency_type),
                 ":latency_history_size": server.latency_history_size as i64,
                 ":id": server.id,
             ],

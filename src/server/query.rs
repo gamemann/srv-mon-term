@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 
 use crate::cli::QueryMonitor;
 use crate::context::Context;
@@ -7,6 +7,9 @@ use crate::logger::Logger;
 use crate::logger::level::LogLevel;
 use crate::query::ext::QueryExt;
 use crate::query::types::Query;
+use crate::query::types::ext::{
+    InfoResponse, QueryResponse as ProtoResponse, UsersResponse, VarsResponse,
+};
 use crate::server::ServerCtx;
 use crate::server::data::ServerStatus;
 use crate::server::types::latency::ServerLatencyType;
@@ -24,11 +27,14 @@ impl ServerCtx {
         let (tag, data, users_len, vars_len) = {
             let server = self.server.read().await;
 
-            let addr = format!("{}:{}", server.ip, server.port);
+            let query_type = server.query_type;
 
-            let query_type = server.query_type.clone();
-
-            let tag = format!("{} ({}:{})", addr, query_type, query_monitor.to_str());
+            let tag = format!(
+                "{} ({}:{})",
+                server.to_addr(),
+                query_type,
+                query_monitor.to_str()
+            );
 
             let users_len = server.data.users.len();
             let vars_len = server.data.vars.len();
@@ -121,292 +127,223 @@ impl ServerCtx {
         println!("{}", content);
     }
 
-    pub async fn query_server(&self, ctx: Context) -> Result<QueryResponse> {
-        let (ip, port, addr, query_type, timeout) = {
+    /// Stores the result of an info query and records its latency when configured to do so.
+    async fn apply_info(
+        &self,
+        ctx: &Context,
+        res: &ProtoResponse<InfoResponse>,
+        queried_port: u16,
+    ) -> Result<()> {
+        {
+            let mut statuses = self.statuses.write().await;
+
+            statuses.query_info = res.status.clone();
+        }
+
+        if res.status == ServerStatus::Online {
+            let mut server = self.server.write().await;
+
+            let data = &mut server.data;
+
+            data.srv_name = res.data.srv_name.clone();
+            data.map_name = res.data.map_name.clone();
+            data.game_name = res.data.game_name.clone();
+            data.game_dir = res.data.game_dir.clone();
+            data.game_id = res.data.game_id;
+            data.users_cur = res.data.users_cnt;
+            data.users_max = res.data.users_max;
+            data.bots_cur = res.data.bots_cnt;
+            data.os = res.data.os.clone();
+            data.is_secure = res.data.is_secure;
+            data.is_dedicated = res.data.is_dedicated;
+            data.is_public = res.data.is_public;
+            data.version = res.data.version.clone();
+            data.last_updated = Some(chrono::Utc::now().timestamp_millis() as u64);
+
+            // Some protocols report the port players connect to, which can differ from the
+            // port that answers queries. Keep querying the port that just answered us.
+            if let Some(game_port) = res.data.game_port
+                && game_port != 0
+                && game_port != queried_port
+            {
+                server.port = game_port;
+                server.port_query = Some(queried_port);
+            }
+        }
+
+        self.record_latency(
+            ctx,
+            ServerLatencyType::SelfInfo,
+            res.status.clone(),
+            res.latency,
+        )
+        .await
+    }
+
+    /// Stores the result of a users query and records its latency when configured to do so.
+    async fn apply_users(&self, ctx: &Context, res: &ProtoResponse<UsersResponse>) -> Result<()> {
+        {
+            let mut statuses = self.statuses.write().await;
+
+            statuses.query_users = res.status.clone();
+        }
+
+        if res.status == ServerStatus::Online {
+            let mut server = self.server.write().await;
+
+            server.data.users = res.data.users.clone();
+        }
+
+        self.record_latency(
+            ctx,
+            ServerLatencyType::SelfUsers,
+            res.status.clone(),
+            res.latency,
+        )
+        .await
+    }
+
+    /// Stores the result of a vars query and records its latency when configured to do so.
+    async fn apply_vars(&self, ctx: &Context, res: &ProtoResponse<VarsResponse>) -> Result<()> {
+        {
+            let mut statuses = self.statuses.write().await;
+
+            statuses.query_vars = res.status.clone();
+        }
+
+        if res.status == ServerStatus::Online {
+            let mut server = self.server.write().await;
+
+            server.data.vars = res.data.vars.clone();
+        }
+
+        self.record_latency(
+            ctx,
+            ServerLatencyType::SelfVars,
+            res.status.clone(),
+            res.latency,
+        )
+        .await
+    }
+
+    /// Adds a latency sample when the server tracks latency through this specific query.
+    async fn record_latency(
+        &self,
+        ctx: &Context,
+        source: ServerLatencyType,
+        status: ServerStatus,
+        latency: u64,
+    ) -> Result<()> {
+        let latency_type = {
             let server = self.server.read().await;
 
-            let addr = format!("{}:{}", server.ip, server.port);
+            server.latency_type
+        };
 
-            let query_type = server.query_type.clone();
-            let query_timeout = server.query_timeout;
+        if latency_type != source {
+            return Ok(());
+        }
+
+        self.add_latency(ctx.clone(), status, latency).await
+    }
+
+    pub async fn query_server(&self, ctx: Context) -> Result<QueryResponse> {
+        let (ip, query_port, addr, query_type, timeout) = {
+            let server = self.server.read().await;
 
             (
                 server.ip.clone(),
-                server.port,
-                addr,
-                query_type.clone(),
-                query_timeout,
+                server.query_port(),
+                server.to_addr(),
+                server.query_type,
+                server.query_timeout,
             )
         };
 
         let args = &ctx.args;
+
         let query_monitor = args
             .parse_query_monitor()
             .ok_or_else(|| anyhow!("Failed to parse query monitor"))?;
 
+        let monitor_only = args.use_query_monitor_only;
+
         // Format tag.
         let tag = format!("{} ({}:{})", addr, query_type, query_monitor.to_str());
 
-        log_debug!(ctx, "{}: Querying server info...", tag,);
+        log_debug!(ctx, "{}: Querying server on port {}...", tag, query_port);
 
-        let monitor_only = args.use_query_monitor_only;
+        let mut query = Query::from_srv_type(&query_type)
+            .await
+            .map_err(|e| anyhow!("Failed to create query: {}", e))?;
 
-        // Perform info query.
-        let func_info = async {
-            let is_query_type = query_monitor == QueryMonitor::Info;
-
-            if monitor_only && !is_query_type {
-                log_debug!(
-                    ctx,
-                    "{}: Skipping info query due to --monitor-only flag...",
-                    tag
-                );
-
-                return Ok((0, ServerStatus::Offline, 0, 0, None));
+        // When we only monitor one query type there is no reason to send the others.
+        let (info, users, vars) = if monitor_only {
+            match query_monitor {
+                QueryMonitor::Info => (
+                    Some(query.query_info(&ip, query_port, timeout).await?),
+                    None,
+                    None,
+                ),
+                QueryMonitor::Users => (
+                    None,
+                    Some(query.query_users(&ip, query_port, timeout).await?),
+                    None,
+                ),
+                QueryMonitor::Vars => (
+                    None,
+                    None,
+                    Some(query.query_vars(&ip, query_port, timeout).await?),
+                ),
             }
+        } else {
+            let all = query.query_all(&ip, query_port, timeout).await?;
 
-            // Create the query.
-            let mut query = match Query::from_srv_type(&query_type).await {
-                Ok(q) => {
-                    log_debug!(ctx, "{}: [INFO] Created query '{}'...", tag, query_type);
-
-                    q
-                }
-                Err(e) => bail!("Failed to create query: {}", e),
-            };
-
-            let latency = {
-                let res = match query.query_info(&ip, port, timeout).await {
-                    Ok(res) => {
-                        // Update query info status.
-                        let mut statuses = self.statuses.write().await;
-                        statuses.query_info = res.status.clone();
-
-                        res
-                    }
-                    Err(e) => bail!("Failed to query info: {}", e),
-                };
-
-                {
-                    let mut server = self.server.write().await;
-
-                    let data = &mut server.data;
-
-                    if res.status == ServerStatus::Online {
-                        data.srv_name = res.data.srv_name.clone();
-                        data.map_name = res.data.map_name.clone();
-                        data.game_name = res.data.game_name.clone();
-                        data.game_dir = res.data.game_dir.clone();
-                        data.game_id = res.data.game_id.clone();
-                        data.users_cur = res.data.users_cnt;
-                        data.users_max = res.data.users_max;
-                        data.bots_cur = res.data.bots_cnt;
-                        data.os = res.data.os.clone();
-                        data.is_secure = res.data.is_secure;
-                        data.is_dedicated = res.data.is_dedicated;
-                        data.is_public = res.data.is_public;
-                        data.version = res.data.version.clone();
-                    }
-                }
-
-                res.latency
-            };
-
-            let latency_ms = latency as f64 / 1000.0;
-
-            // Retrieve server info from info query.
-            let (latency_type, status, users_cur, users_max, map_name) = {
-                let server = self.server.read().await;
-
-                let users_cur = server.data.users_cur;
-                let users_max = server.data.users_max;
-                let map_name = server.data.map_name.clone();
-
-                let status = self.statuses.read().await.query_info.clone();
-
-                (
-                    server.latency_type.clone(),
-                    status.clone(),
-                    users_cur,
-                    users_max,
-                    map_name,
-                )
-            };
-
-            // If our server's query latency type is self info, we'll want to set the latency to the info query time.
-            if latency_type == ServerLatencyType::SelfInfo {
-                log_debug!(
-                    ctx,
-                    "{}: Setting latency to info query latency of {}ms... Status: {}",
-                    tag,
-                    query_monitor.to_str(),
-                    latency_ms
-                );
-
-                self.add_latency(ctx.clone(), status.clone(), latency)
-                    .await?;
-            }
-
-            Ok((latency, status, users_cur, users_max, map_name))
+            (Some(all.info), Some(all.users), Some(all.vars))
         };
 
-        // Perform users query.
-        let func_users = async {
-            let is_query_type = query_monitor == QueryMonitor::Users;
+        let mut latency_info = 0;
+        let mut latency_users = 0;
+        let mut latency_vars = 0;
 
-            if monitor_only && !is_query_type {
-                log_debug!(
-                    ctx,
-                    "{}: Skipping users query due to --monitor-only flag...",
-                    tag
-                );
+        let mut status = ServerStatus::Unknown;
 
-                return Ok((0, 0));
+        if let Some(res) = &info {
+            self.apply_info(&ctx, res, query_port).await?;
+
+            latency_info = res.latency;
+            status = res.status.clone();
+        }
+
+        if let Some(res) = &users {
+            self.apply_users(&ctx, res).await?;
+
+            latency_users = res.latency;
+
+            if info.is_none() {
+                status = res.status.clone();
             }
+        }
 
-            // Create the query.
-            let mut query = match Query::from_srv_type(&query_type).await {
-                Ok(q) => {
-                    log_debug!(ctx, "{}: [USERS] Created query '{}'...", tag, query_type);
+        if let Some(res) = &vars {
+            self.apply_vars(&ctx, res).await?;
 
-                    q
-                }
-                Err(e) => bail!("Failed to create query: {}", e),
-            };
+            latency_vars = res.latency;
 
-            let (latency, latency_type, users_count, status) = {
-                let res = match query.query_users(&ip, port, timeout).await {
-                    Ok(res) => {
-                        // Update query users status.
-                        let mut statuses = self.statuses.write().await;
-                        statuses.query_users = res.status.clone();
-
-                        res
-                    }
-                    Err(e) => bail!("Failed to query server users: {}", e),
-                };
-
-                let latency_type = {
-                    let server = self.server.read().await;
-
-                    server.latency_type.clone()
-                };
-
-                // If the status is successful, update the users.
-                if res.status == ServerStatus::Online {
-                    let mut server = self.server.write().await;
-
-                    let data = &mut server.data;
-
-                    data.users = res.data.users.clone();
-                }
-
-                (
-                    res.latency,
-                    latency_type,
-                    res.data.users.len(),
-                    res.status.clone(),
-                )
-            };
-
-            let latency_ms = latency as f64 / 1000.0;
-
-            log_debug!(ctx, "{}: Queried server users in {}ms...", tag, latency_ms);
-
-            if latency_type == ServerLatencyType::SelfUsers {
-                log_debug!(
-                    ctx,
-                    "{}: Setting latency to users query latency of {}ms...",
-                    tag,
-                    latency_ms
-                );
-
-                self.add_latency(ctx.clone(), status, latency).await?;
+            if info.is_none() && users.is_none() {
+                status = res.status.clone();
             }
+        }
 
-            Ok((latency, users_count))
-        };
-
-        // Perform vars query.
-        let func_vars = async {
-            let is_query_type = query_monitor == QueryMonitor::Vars;
-
-            if monitor_only && !is_query_type {
-                log_debug!(
-                    ctx,
-                    "{}: Skipping vars query due to --monitor-only flag...",
-                    tag
-                );
-
-                return Ok((0, 0));
-            }
-
-            // Create the query.
-            let mut query = match Query::from_srv_type(&query_type).await {
-                Ok(q) => {
-                    log_debug!(ctx, "{}: [VARS] Created query '{}'...", tag, query_type);
-
-                    q
-                }
-                Err(e) => bail!("Failed to create query: {}", e),
-            };
-
-            let (latency, latency_type, vars_count, status) = {
-                let res = match query.query_vars(&ip, port, timeout).await {
-                    Ok(q) => q,
-                    Err(e) => bail!("Failed to query server vars: {}", e),
-                };
-
-                let check_offline = monitor_only && is_query_type;
-
-                if res.data.vars.len() > 0 || check_offline {
-                    let mut server = self.server.write().await;
-
-                    let data = &mut server.data;
-
-                    // Update vars if the query was successful.
-                    if res.status == ServerStatus::Online {
-                        data.vars = res.data.vars.clone();
-                    }
-                }
-
-                let latency_type = {
-                    let server = self.server.read().await;
-
-                    server.latency_type.clone()
-                };
-
-                (
-                    res.latency,
-                    latency_type,
-                    res.data.vars.len() as u32,
-                    res.status.clone(),
-                )
-            };
-
-            let latency_ms = latency as f64 / 1000.0;
-
-            log_debug!(ctx, "{}: Queried server vars in {}ms...", tag, latency_ms);
-
-            if latency_type == ServerLatencyType::SelfVars {
-                log_debug!(
-                    ctx,
-                    "{}: Setting latency to vars query latency of {}ms...",
-                    tag,
-                    latency_ms
-                );
-
-                self.add_latency(ctx.clone(), status, latency).await?;
-            }
-
-            Ok((latency, vars_count))
-        };
-
-        let (info, users, vars) = tokio::try_join!(func_info, func_users, func_vars)?;
-
-        let (latency_info, status, _, _, _) = info;
-        let (latency_users, _) = users;
-        let (latency_vars, _) = vars;
+        log_debug!(
+            ctx,
+            "{}: Query finished with status {} (info: {:.2}ms, users: {:.2}ms, vars: {:.2}ms).",
+            tag,
+            status,
+            latency_info as f64 / 1000.0,
+            latency_users as f64 / 1000.0,
+            latency_vars as f64 / 1000.0
+        );
 
         if args.basic {
             let latency_to_use = match query_monitor {
